@@ -120,6 +120,10 @@ Don't silently fill in ambiguous requirements. The spec's entire purpose is to s
 ## Objective
 [What we're building and why. User stories or acceptance criteria.]
 
+## Requirements
+- **R1:** [What must be true. One testable statement.]
+  Verification: [The test or check that proves it.]
+
 ## Tech Stack
 [Framework, language, key dependencies with versions]
 
@@ -146,6 +150,20 @@ Don't silently fill in ambiguous requirements. The spec's entire purpose is to s
 ## Open Questions
 [Anything unresolved that needs human input]
 ```
+
+**Requirements format.** List every requirement under one `## Requirements` heading, with how it is verified. Tasks and reviews refer to requirements by ID.
+
+```markdown
+## Requirements
+
+- **R1:** The review level is `task`, `phase`, or `full_work`.
+  Verification: `test_unknown_level_stops` in `tests/test_scope.py`.
+```
+
+- Requirements are the `- **<ID>:**` items under the `## Requirements` heading. An ID is a letter followed by letters, digits, dots, or hyphens.
+- The text runs to the `Verification:` line. The verification runs to the next item or heading. Both must be present.
+- IDs are unique within the spec and are never renumbered.
+- Format examples inside code fences are not read as requirements.
 
 **External spec tools:** This workflow is format-agnostic. If the project
 already uses OpenSpec or another specification system, keep that system's
@@ -179,7 +197,7 @@ With the validated spec, generate a technical implementation plan:
 
 > Follow `planning-and-task-breakdown` for the dependency-graph mapping and vertical-slicing mechanics behind these steps; it is the canonical source. The bullets above are a lightweight summary; if they ever diverge, `planning-and-task-breakdown` takes precedence.
 >
-> **Output convention:** Save the plan to `tasks/plan.md` and record the task list in the task list target defined by `planning-and-task-breakdown` (default `tasks/todo.md`; projects may designate an external tracker instead). Create `tasks/` if it does not exist. Downstream commands (`/build`, etc.) expect these defaults.
+> **Output convention:** Save the plan to `tasks/plan.md` and record the task list in the task list target defined by `planning-and-task-breakdown`: a markdown task file committed to the repository (default `tasks/todo.md`). A tracker may mirror it but does not replace it. Create `tasks/` if it does not exist. Downstream commands (`/build`, etc.) expect these defaults.
 
 The plan should be reviewable: the human should be able to read it and say "yes, that's the right approach" or "no, change X."
 
@@ -197,10 +215,23 @@ Break the plan into discrete, implementable tasks:
 
 **Task template:**
 ```markdown
-- [ ] Task: [Description]
-  - Acceptance: [What must be true when done]
-  - Verify: [How to confirm — test command, build, manual check]
-  - Files: [Which files will be touched]
+**Spec:** [SPEC-[name].md](SPEC-[name].md)
+
+## Phase [N]: [Title]
+
+### Task [N]: [Description]
+
+**Requirements:** [Spec requirement IDs, e.g. R1, R3]
+**Starting commit:** [Full ID of HEAD when the task starts. Empty until then.]
+
+**Acceptance criteria:**
+- [ ] [What must be true when done]
+
+**Verification:**
+- [ ] [How to confirm: test command, build, manual check]
+
+**Files likely touched:**
+- [Which files will be touched]
 ```
 
 ### Phase 4: Implement
@@ -245,6 +276,7 @@ Before proceeding to implementation, confirm:
 - [ ] The spec covers all six core areas
 - [ ] The human has reviewed and approved the spec
 - [ ] Success criteria are specific and testable
+- [ ] Every requirement has a stable ID and a `Verification:` line under `## Requirements`
 - [ ] Boundaries (Always/Ask First/Never) are defined
 - [ ] The spec is saved to a file in the repository
 - [ ] If the request bundles several independently testable capabilities, a capability map (module ids, dependency direction, build order) was approved before any module spec was written

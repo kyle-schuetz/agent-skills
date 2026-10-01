@@ -78,10 +78,17 @@ Each vertical slice delivers working, testable functionality.
 
 ### Step 4: Write Tasks
 
-Each task follows this structure, whether it lands in the markdown task list or as an item in an external tracker (see Output Files):
+Write tasks in the task list target (see Output Files). The file links its spec once at the top, groups tasks under phase headings, and gives each task this structure:
 
 ```markdown
-## Task [N]: [Short descriptive title]
+**Spec:** [SPEC-[name].md](SPEC-[name].md)
+
+## Phase [N]: [Short phase title]
+
+### Task [N]: [Short descriptive title]
+
+**Requirements:** [IDs of the spec requirements this task covers, e.g. R1, R3]
+**Starting commit:** [Full ID of HEAD when the task starts. Empty until then.]
 
 **Description:** One paragraph explaining what this task accomplishes.
 
@@ -102,6 +109,15 @@ Each task follows this structure, whether it lands in the markdown task list or 
 
 **Estimated scope:** [Small: 1-2 files | Medium: 3-5 files | Large: 5+ files]
 ```
+
+Review setup reads these fields from the task file as committed, so follow them exactly:
+
+- `**Spec:**` appears once and links the spec, relative to the task file's folder.
+- A phase is a `## Phase <n>: <title>` heading. Its tasks are the `### Task <n>: <title>` headings under it, up to the next `## ` heading, such as a checkpoint.
+- Phase and task numbers are unique within the file.
+- `**Requirements:**` lists the IDs of the spec requirements the task covers, separated by commas. Every task lists at least one.
+- `**Starting commit:**` is the full ID of `HEAD` when the task starts. It is recorded in the task file, and that edit is committed with the task's work. Recording it does not change what was approved, like ticking a checkbox.
+- Work with one spec uses one task file with one or more phases. Work split into one spec per module uses one task file per module, each with its own phases.
 
 ### Step 5: Order and Checkpoint
 
@@ -152,16 +168,14 @@ Create the `tasks/` directory if it does not exist.
 - Same work being replanned (the user asked to revise or extend this plan) → update the existing files in place.
 - Different work → **stop and ask.** The unchecked tasks may be mid-build in another session. Do not delete, overwrite, or rename the existing files on your own; present the conflict and let the user decide (finish the old plan first, explicitly discard it, or tell you where the new plan should go).
 
-The same rule applies to an external task list target: never bulk-close or delete another plan's open tracker items to make room for new ones.
+The same rule applies to tracker items that mirror another plan's tasks: never bulk-close or delete them to make room for new ones.
 
 ### Task List Target
 
 The task list target is where tasks and checkpoints are recorded. It is defined once, here; every other reference in this skill defers to it.
 
-- **Default: a checklist-style markdown file at `tasks/todo.md`.** This is the convention the `/build` command and other downstream tooling expect. Use it unless the project says otherwise.
-- **External tracker:** if the project's agent rules (`CLAUDE.md`, `AGENTS.md`, etc.) or the user designate an issue tracker (e.g. GitHub Issues, Jira, Linear, `bd`/beads), create one tracker item per task instead of writing `tasks/todo.md`. Map the Step 4 structure onto the tracker's fields: acceptance criteria and verification steps in the item body, dependencies via the tracker's linking mechanism (`bd dep add`, "blocked by", etc.). Record Step 5 checkpoints as tracker items too, or as a checklist in the plan document if the tracker has no natural equivalent.
-
-When using an external tracker, note it in `tasks/plan.md` (e.g. "Tasks tracked in Linear project FOO") so downstream steps and future sessions know where to look, and keep the plan document's Task List section as an ordered index of tracker item IDs or links rather than a duplicate checklist.
+- **The task list target is always a checklist-style markdown file committed to the repository.** The default is `tasks/todo.md`. A project may name another path, such as one task file per module. This is the convention the `/build` command and other downstream tooling expect.
+- **Trackers mirror the file.** If the project's agent rules (`CLAUDE.md`, `AGENTS.md`, etc.) or the user want issues in a tracker (e.g. GitHub Issues, Jira, Linear, `bd`/beads), create them as copies that link back to their task in the file. The committed task file stays the source. A review reads the task file as it was at the reviewed commit, and a tracker item has no such version.
 
 ## Plan Document Template
 
@@ -177,27 +191,11 @@ When using an external tracker, note it in `tasks/plan.md` (e.g. "Tasks tracked 
 
 ## Task List
 
-### Phase 1: Foundation
-- [ ] Task 1: ...
-- [ ] Task 2: ...
+Phases and tasks are in [the task file](todo.md). Order:
 
-### Checkpoint: Foundation
-- [ ] Tests pass, builds clean
-
-### Phase 2: Core Features
-- [ ] Task 3: ...
-- [ ] Task 4: ...
-
-### Checkpoint: Core Features
-- [ ] End-to-end flow works
-
-### Phase 3: Polish
-- [ ] Task 5: ...
-- [ ] Task 6: ...
-
-### Checkpoint: Complete
-- [ ] All acceptance criteria met
-- [ ] Ready for review
+1. Phase 1: Foundation (Tasks 1-2)
+2. Phase 2: Core Features (Tasks 3-4)
+3. Phase 3: Polish (Tasks 5-6)
 
 ## Risks and Mitigations
 | Risk | Impact | Mitigation |
@@ -207,8 +205,6 @@ When using an external tracker, note it in `tasks/plan.md` (e.g. "Tasks tracked 
 ## Open Questions
 - [Question needing human input]
 ```
-
-When tasks live in an external tracker, keep the Task List section above as an ordered index of tracker item IDs or links instead of a duplicate checklist.
 
 ## Parallelization Opportunities
 
@@ -232,7 +228,8 @@ When multiple agents or sessions are available:
 
 - Starting implementation without a written task list
 - Overwriting a `tasks/plan.md` or `tasks/todo.md` that still has unchecked tasks for different work, without asking
-- Writing `tasks/todo.md` when the project has designated an external tracker (or scattering tasks across both)
+- Keeping tasks only in a tracker, or letting a tracker and the task file disagree
+- Tasks without `**Requirements:**` IDs from the spec
 - Tasks that say "implement the feature" without acceptance criteria
 - No verification steps in the plan
 - All tasks are XL-sized
@@ -247,6 +244,7 @@ Before starting implementation, confirm:
 - [ ] Every task has a verification step
 - [ ] Task dependencies are identified and ordered correctly
 - [ ] Tasks are recorded in the task list target (default `tasks/todo.md`)
+- [ ] Every task lists the spec requirement IDs it covers, and tasks sit under `## Phase` headings
 - [ ] No pre-existing incomplete plan was overwritten without explicit user confirmation
 - [ ] No task touches more than ~5 files
 - [ ] Checkpoints exist between major phases
