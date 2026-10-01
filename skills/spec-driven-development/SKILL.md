@@ -164,12 +164,7 @@ Don't silently fill in ambiguous requirements. The spec's entire purpose is to s
 - The text runs to the `Verification:` line. The verification runs to the next item or heading. Both must be present.
 - IDs are unique within the spec and are never renumbered.
 - Format examples inside code fences are not read as requirements.
-
-**External spec tools:** This workflow is format-agnostic. If the project
-already uses OpenSpec or another specification system, keep that system's
-artifact format and storage conventions instead of creating a duplicate
-`SPEC.md`. This skill owns the clarification, content, and approval gates; the
-external tool owns how the approved spec is represented.
+- Every spec uses this format, in every project. Do not substitute another spec tool's format.
 
 **Reframe instructions as success criteria.** When receiving vague requirements, translate them into concrete conditions:
 
