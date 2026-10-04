@@ -122,7 +122,7 @@ Don't silently fill in ambiguous requirements. The spec's entire purpose is to s
 
 ## Requirements
 - **R1:** [What must be true. One testable statement.]
-  Verification: [The test or check that proves it.]
+  Verification: [The test in this project that proves it, e.g. `test_name` in `tests/test_file.py`.]
 
 ## Tech Stack
 [Framework, language, key dependencies with versions]
@@ -162,6 +162,9 @@ Don't silently fill in ambiguous requirements. The spec's entire purpose is to s
 
 - Requirements are the `- **<ID>:**` items under the `## Requirements` heading. An ID is a letter followed by letters, digits, dots, or hyphens.
 - The text runs to the `Verification:` line. The verification runs to the next item or heading. Both must be present.
+- Every requirement is tested inside the project under test. The `Verification:` line names one test as a backticked `test...` identifier and one test file as a backticked `.py` path. A command, `diff`, manual check, or check outside the repository is not a verification.
+- A real run is acceptance evidence for a task, not a requirement. Put its expected result in the task's acceptance criteria.
+- An install is a release step, not a requirement.
 - IDs are unique within the spec and are never renumbered.
 - Format examples inside code fences are not read as requirements.
 - Every spec uses this format, in every project. Do not substitute another spec tool's format.
@@ -271,7 +274,7 @@ Before proceeding to implementation, confirm:
 - [ ] The spec covers all six core areas
 - [ ] The human has reviewed and approved the spec
 - [ ] Success criteria are specific and testable
-- [ ] Every requirement has a stable ID and a `Verification:` line under `## Requirements`
+- [ ] Every requirement has a stable ID and a `Verification:` line under `## Requirements` that names one test and its `.py` file in this project
 - [ ] Boundaries (Always/Ask First/Never) are defined
 - [ ] The spec is saved to a file in the repository
 - [ ] If the request bundles several independently testable capabilities, a capability map (module ids, dependency direction, build order) was approved before any module spec was written
