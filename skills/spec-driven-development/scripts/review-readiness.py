@@ -18,10 +18,10 @@ Stages:
         test class, skip, or xfail. Same arguments as `evidence-based-review review`.
 
     staged
-        The Git pre-commit hook (scripts/pre-commit). Checks the commit being made: every staged
-        spec (a SPEC*.md file, or any file with a `## Requirements` heading), every task file in the
-        staged tree (TASKS*.md, tasks/todo.md, or any file with a `**Spec:**` line) with the `plan`
-        rules, and every added line of a staged .py file for parametrize, test classes, skips, and xfails.
+        The Git pre-commit hook (scripts/pre-commit). Checks the commit being made: each staged spec,
+        each staged task file and each task file that links a staged spec, with the `plan` rules, and
+        every added line of a staged .py file for parametrize, test classes, skips, and xfails. Files
+        that the commit does not touch are not checked.
 
 Prints one line per check, then READY or NOT READY. Exit code 0 only when READY.
 """
@@ -39,7 +39,8 @@ from pathlib import Path, PurePosixPath
 
 from evidence_based_review.checks import read_check
 from evidence_based_review.records import Failure
-from evidence_based_review.scope import (_baseline, _check_verifications, _git, _lines, _requirements,
+from evidence_based_review.scope import (_PHASE, _SPEC_LINK, _baseline, _check_verifications, _git, _lines,
+                                         _requirements,
                                          _tasks_in_scope, check_source, parse_spec, read_work, resolve_commit,
                                          review_scope)
 from evidence_based_review.agents import project_commands
@@ -129,26 +130,35 @@ def staged_stage(args) -> None:
     commit = _git(worktree, "commit-tree", tree, *(["-p", parent] if parent else []),
                   "-m", "review readiness check of the staged tree").strip()
     staged = _git(worktree, "diff", "--cached", "--name-only", "--diff-filter=ACMR", "-z").split("\0")
-    markdown = [path for path in _git(worktree, "ls-tree", "-r", "--name-only", "-z", commit).split("\0")
-                if path.endswith(".md")]
-    task_files, specs = [], []
-    for path in markdown:
-        lines = list(_lines(_git(worktree, "show", f"{commit}:{path}")))
-        name = posixpath.basename(path)
-        if (fnmatchcase(name, "TASKS*.md") or path == "tasks/todo.md" or path.endswith("/tasks/todo.md")
-                or any(line.startswith("**Spec:**") for line in lines)):
-            task_files.append(path)
-        if path in staged and (fnmatchcase(name, "SPEC*.md") or any(line.rstrip() == "## Requirements"
-                                                                     for line in lines)):
-            specs.append(path)
-    for path in specs:
-        check_spec(worktree, commit, path, _git(worktree, "show", f"{commit}:{path}"))
-    if task_files and any(path in staged for path in task_files + specs):
-        report("task files and specs in this commit", lambda: check_work(worktree, commit, task_files))
+    check_documents(worktree, commit, staged)
     added = [line for line in _git(worktree, "diff", "--cached", "-U0", "--", "*.py").splitlines()
              if line.startswith("+") and not line.startswith("+++")]
     report("no parametrize, test classes, skips, or xfails added",
            lambda: forbidden_lines([line[1:] for line in added]))
+
+
+def check_documents(worktree: Path, commit: str, staged: list[str]) -> None:
+    """Check the staged specs and the task files this commit touches: the staged task files, and the task files
+    that link a staged spec. A task file is a TASKS*.md file, a tasks/todo.md, or a file with a `**Spec:**` line and
+    a `## Phase` heading. A spec is a SPEC*.md file or a file a task file links."""
+    links = {}
+    for path in _git(worktree, "ls-tree", "-r", "--name-only", "-z", commit).split("\0"):
+        if not path.endswith(".md"):
+            continue
+        lines = list(_lines(_git(worktree, "show", f"{commit}:{path}")))
+        if (fnmatchcase(posixpath.basename(path), "TASKS*.md") or path == "tasks/todo.md"
+                or path.endswith("/tasks/todo.md")
+                or (any(line.startswith("**Spec:**") for line in lines) and any(_PHASE.match(line) for line in lines))):
+            targets = [posixpath.normpath(posixpath.join(posixpath.dirname(path), match.group(1)))
+                       for match in map(_SPEC_LINK.match, lines) if match]
+            links[path] = targets
+    linked = {target for targets in links.values() for target in targets}
+    specs = [path for path in staged if fnmatchcase(posixpath.basename(path), "SPEC*.md") or path in linked]
+    task_files = [path for path, targets in links.items() if path in staged or set(targets) & set(specs)]
+    for path in specs:
+        check_spec(worktree, commit, path, _git(worktree, "show", f"{commit}:{path}"))
+    if task_files:
+        report("task files in this commit", lambda: check_work(worktree, commit, task_files))
 
 
 def forbidden_lines(lines: list[str]):
