@@ -19,8 +19,9 @@ Stages:
 
     staged
         The Git pre-commit hook (scripts/pre-commit). Checks the commit being made: every staged
-        spec and every task file in the staged tree, with the `plan` rules, and every added line
-        of a staged .py file for parametrize, test classes, skips, and xfails.
+        spec (a SPEC*.md file, or any file with a `## Requirements` heading), every task file in the
+        staged tree (TASKS*.md, tasks/todo.md, or any file with a `**Spec:**` line) with the `plan`
+        rules, and every added line of a staged .py file for parametrize, test classes, skips, and xfails.
 
 Prints one line per check, then READY or NOT READY. Exit code 0 only when READY.
 """
@@ -28,6 +29,7 @@ Prints one line per check, then READY or NOT READY. Exit code 0 only when READY.
 from __future__ import annotations
 
 import argparse
+from fnmatch import fnmatchcase
 import os
 import posixpath
 import re
@@ -132,9 +134,12 @@ def staged_stage(args) -> None:
     task_files, specs = [], []
     for path in markdown:
         lines = list(_lines(_git(worktree, "show", f"{commit}:{path}")))
-        if any(line.startswith("**Spec:**") for line in lines):
+        name = posixpath.basename(path)
+        if (fnmatchcase(name, "TASKS*.md") or path == "tasks/todo.md" or path.endswith("/tasks/todo.md")
+                or any(line.startswith("**Spec:**") for line in lines)):
             task_files.append(path)
-        if path in staged and any(line.rstrip() == "## Requirements" for line in lines):
+        if path in staged and (fnmatchcase(name, "SPEC*.md") or any(line.rstrip() == "## Requirements"
+                                                                     for line in lines)):
             specs.append(path)
     for path in specs:
         check_spec(worktree, commit, path, _git(worktree, "show", f"{commit}:{path}"))

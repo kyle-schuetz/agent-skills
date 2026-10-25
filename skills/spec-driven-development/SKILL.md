@@ -36,11 +36,13 @@ SPECIFY ──→ PLAN ──→ TASKS ──→ IMPLEMENT
 The evidence-based review tool reads the spec, the task files, and the test reports exactly. A document that looks right can still stop the review at setup or during the run. The checks below run the review tool's own parser and setup code (`scripts/review-readiness.py`, run in the tool's environment).
 
 **Commit gate.** A phase that creates the spec or the task file ends only when that file is committed. The project's Git pre-commit hook (`scripts/pre-commit`) runs `review-readiness.py staged` on every commit and refuses the commit when:
-- a staged spec does not parse as review setup parses it, or a `Verification:` line cannot be read;
-- any task file in the commit breaks a review setup rule (the `plan` rules below), including after a spec change removes a requirement a task lists;
+- a staged spec does not parse as review setup parses it, or a `Verification:` line cannot be read. A spec is any `SPEC*.md` file, or any file with a `## Requirements` heading;
+- any task file in the commit breaks a review setup rule (the `plan` rules below), including after a spec change removes a requirement a task lists. A task file is any `TASKS*.md` file, any `tasks/todo.md`, or any file with a `**Spec:**` line;
 - a staged `.py` file adds a `parametrize`, a `class Test`, a skip, or an xfail.
 
 A refused commit means the phase has not ended. Fix the file and commit again.
+
+Name every spec `SPEC*.md` and every task file `TASKS*.md` or `tasks/todo.md`, so the hook checks it.
 
 Before Phase 1 writes anything, check that the hook is installed:
 
