@@ -8,7 +8,7 @@ Run it with the review tool's environment, so the checks are the tool's code, no
 
 Stages:
     spec <spec-file> [--worktree <path>]
-        Parse the spec as review setup does. Reads the file on disk.
+        Parse the spec as committed at HEAD of a clean worktree, as review setup does.
     plan --task-file <path>... [--worktree <path>]
         Check every task file and its spec at HEAD of a clean worktree. A task that has not
         started may have an empty starting commit; every other rule applies.
@@ -70,7 +70,15 @@ def report(name: str, check) -> object:
 def spec_stage(args) -> None:
     worktree = Path(args.worktree).resolve()
     path = posixpath.normpath(args.spec)
-    check_spec(worktree, resolve_commit(worktree, "HEAD"), path, (worktree / path).read_text())
+    commit = report("clean checkout", lambda: clean_head(worktree))
+    if commit is not None:
+        check_spec(worktree, commit, path, _git(worktree, "show", f"{commit}:{path}"))
+
+
+def clean_head(worktree: Path):
+    commit = resolve_commit(worktree, "HEAD")
+    check_source(worktree, commit)
+    return commit, f"HEAD {commit} has no uncommitted or untracked changes"
 
 
 def check_spec(worktree: Path, commit: str, path: str, text: str) -> None:
@@ -102,13 +110,7 @@ def check_spec(worktree: Path, commit: str, path: str, text: str) -> None:
 
 def plan_stage(args) -> None:
     worktree = Path(args.worktree).resolve()
-
-    def clean_head():
-        commit = resolve_commit(worktree, "HEAD")
-        check_source(worktree, commit)
-        return commit, f"HEAD {commit} has no uncommitted or untracked changes"
-
-    commit = report("clean checkout", clean_head)
+    commit = report("clean checkout", lambda: clean_head(worktree))
     if commit is not None:
         report("task files and specs at HEAD", lambda: check_work(worktree, commit, args.task_files))
 

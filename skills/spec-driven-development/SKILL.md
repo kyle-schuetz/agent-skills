@@ -62,7 +62,7 @@ The commands below run the same checks by hand, plus the named-test runs that a 
 
 | Gate | When | Command, run from the project checkout |
 |---|---|---|
-| Specify | After the spec is written, before asking for approval | `uv run --project /home/kyleschuetz/evidence-based-review python /home/kyleschuetz/.agents/skills/spec-driven-development/scripts/review-readiness.py spec <spec file>` |
+| Specify | After the spec is committed, before asking for approval | `uv run --project /home/kyleschuetz/evidence-based-review python /home/kyleschuetz/.agents/skills/spec-driven-development/scripts/review-readiness.py spec <spec file>` |
 | Plan and Tasks | After the spec, plan, and task file are committed, from a clean checkout | `uv run --project /home/kyleschuetz/evidence-based-review python /home/kyleschuetz/.agents/skills/spec-driven-development/scripts/review-readiness.py plan --task-file <task file>...` |
 | Implement | After each task's work is committed | `uv run --project /home/kyleschuetz/evidence-based-review python /home/kyleschuetz/.agents/skills/spec-driven-development/scripts/review-readiness.py review task "<task file>#Task <n>" --candidate HEAD --task-file <task file>...` |
 | Handoff to review | Before saying the work is ready for review, with the arguments the review will get | `uv run --project /home/kyleschuetz/evidence-based-review python /home/kyleschuetz/.agents/skills/spec-driven-development/scripts/review-readiness.py review <level> [<target>] --candidate <ref> --task-file <task file>...` |
@@ -72,12 +72,13 @@ Add `--worktree <path>` when running from another directory. `review` takes the 
 **Expected output:** one `PASS` line per check, then `READY`, exit code 0. Any `FAIL` line ends with `NOT READY` and exit code 1; the lines under it are the review tool's own message.
 
 **Rules:**
-- Do not finish a gate, ask for approval, mark a task done, or say anything is ready for review without running its hook and pasting its full output in your message.
+- Never ask for approval of a spec, plan, or task file that is not committed. Every approval request includes the hook's full output, which names the commit.
+- Do not finish a gate, mark a task done, or say anything is ready for review without running its hook and pasting its full output in your message.
 - Only `READY` passes a gate. Fix the document or code and run the hook again. Never edit the review tool or this script to get `READY`.
 - The `review` stage runs the named tests, so it takes as long as the review's checks.
 
 What each stage checks:
-- `spec`: the spec parses as review setup parses it, and every `Verification:` line names its tests and one test file the project has a test command for. It prints the requirement count and IDs.
+- `spec`: at `HEAD` of a clean checkout, the committed spec parses as review setup parses it, and every `Verification:` line names its tests and one test file the project has a test command for. It prints the requirement count and IDs.
 - `plan`: at `HEAD` of a clean checkout, every task file and its spec are committed and parse; every phase has tasks; every task lists requirements that exist in the spec, with readable `Verification:` lines; every recorded starting commit is a bare 40-character commit ID in `HEAD`'s history, in task order. A task that has not started may have an empty starting commit.
 - `staged`: what the pre-commit hook runs on the commit being made.
 - `review`: the review tool's setup (`scope.review_scope`) with no exceptions, including a starting commit for every task in scope. Then each requirement's check, run by the review tool's own code as the review runs it: in a temporary worktree at the candidate, the project's `setup` commands, the `build` and `test` commands declared for the test file's type in `[tool.evidence-based-review]` (pytest for `.py` when none is declared), and the report matched to each named test. A named test passes only when it is in the report exactly once and passed; missing, failed, skipped, or matched more than once fails. The project's `teardown` commands run at the end. Then `git grep` at the candidate finds no `parametrize`, `^class Test`, skip, or xfail in any tracked Python test file. This also catches what a commit made with `--no-verify` let in. Then the checkout is still clean.
@@ -236,7 +237,7 @@ REFRAMED SUCCESS CRITERIA:
 
 This lets you loop, retry, and problem-solve toward a clear goal rather than guessing what "faster" means.
 
-**Specify hook.** Commit the spec; the pre-commit hook checks it. Before asking the human to approve the spec, also run `uv run --project /home/kyleschuetz/evidence-based-review python /home/kyleschuetz/.agents/skills/spec-driven-development/scripts/review-readiness.py spec <spec file>` and paste its output. It must end with `READY`.
+**Specify hook.** Commit the spec; the pre-commit hook checks it. Then run `uv run --project /home/kyleschuetz/evidence-based-review python /home/kyleschuetz/.agents/skills/spec-driven-development/scripts/review-readiness.py spec <spec file>` and paste its output. It must end with `READY`. Only then ask the human to approve the spec, at the commit the output names. After any requested change, commit again and run the hook again before asking again.
 
 ### Phase 2: Plan
 
@@ -289,7 +290,7 @@ Break the plan into discrete, implementable tasks:
 
 The task file rules are in `planning-and-task-breakdown` (Step 4). The one that fails most often: `**Starting commit:**` is the bare 40-character ID, with no backticks or other text.
 
-**Plan and Tasks hook.** Commit the spec, plan, and task file. From a clean checkout, run `uv run --project /home/kyleschuetz/evidence-based-review python /home/kyleschuetz/.agents/skills/spec-driven-development/scripts/review-readiness.py plan --task-file <task file>...` and paste its output. It must end with `READY` before you ask the human to approve the tasks.
+**Plan and Tasks hook.** Commit the spec, plan, and task file. From a clean checkout, run `uv run --project /home/kyleschuetz/evidence-based-review python /home/kyleschuetz/.agents/skills/spec-driven-development/scripts/review-readiness.py plan --task-file <task file>...` and paste its output. It must end with `READY` before you ask the human to approve the tasks, at the commit the output names. After any requested change, commit again and run the hook again before asking again.
 
 ### Phase 4: Implement
 

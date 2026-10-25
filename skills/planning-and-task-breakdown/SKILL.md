@@ -122,7 +122,7 @@ Review setup reads these fields from the task file as committed, so follow them 
 - Work with one spec uses one task file with one or more phases. Work split into one spec per module uses one task file per module, each with its own phases.
 - Review setup reads the task file and spec as committed, from a checkout with no uncommitted or untracked files.
 
-**Hook.** Commit the task file with its spec. The project's pre-commit hook refuses the commit when the task file or spec breaks any rule above (see `spec-driven-development`, Review Readiness Hooks, for installing it). Never commit with `--no-verify`. Then, from a clean checkout, run this and paste its full output. Do not ask for approval or call the tasks ready until it ends with `READY`:
+**Hook.** Commit the task file with its spec. The project's pre-commit hook refuses the commit when the task file or spec breaks any rule above (see `spec-driven-development`, Review Readiness Hooks, for installing it). Never commit with `--no-verify`. Then, from a clean checkout, run this and paste its full output. Never ask for approval of an uncommitted task file. Do not ask for approval or call the tasks ready until it ends with `READY`, and ask for approval at the commit it names:
 
 ```
 uv run --project /home/kyleschuetz/evidence-based-review python /home/kyleschuetz/.agents/skills/spec-driven-development/scripts/review-readiness.py plan --task-file <task file>...
