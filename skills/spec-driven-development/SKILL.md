@@ -38,7 +38,7 @@ The evidence-based review tool reads the spec, the task files, and the test repo
 **Commit gate.** A phase that creates the spec or the task file ends only when that file is committed. The project's Git pre-commit hook (`scripts/pre-commit`) runs `review-readiness.py staged` on every commit and refuses the commit when:
 - a staged spec does not parse as review setup parses it, or a `Verification:` line cannot be read. A spec is any `SPEC*.md` file, or any file a task file links;
 - a staged task file, or a task file that links a staged spec, breaks a review setup rule (the `plan` rules below), including after a spec change removes a requirement a task lists. A task file is any `TASKS*.md` file, any `tasks/todo.md`, or any file with a `**Spec:**` line and a `## Phase` heading;
-- a staged `.py` file adds a `parametrize`, a `class Test`, a skip, or an xfail.
+- a staged Python test file (`test_*.py`, `*_test.py`, `conftest.py`, or any `.py` file under a `tests/` or `test/` folder) adds a `parametrize`, a `class Test`, a skip, or an xfail.
 
 Files the commit does not touch are not checked. A refused commit means the phase has not ended. Fix the file and commit again.
 
@@ -58,7 +58,7 @@ ln -s /home/kyleschuetz/.agents/skills/spec-driven-development/scripts/pre-commi
 
 If another pre-commit hook is already there, stop and ask the human. Never commit with `--no-verify`, and never remove, replace, or edit the hook.
 
-The commands below run the same checks by hand, plus the named-test collection that a commit does not run:
+The commands below run the same checks by hand, plus the named-test runs that a commit does not do:
 
 | Gate | When | Command, run from the project checkout |
 |---|---|---|
@@ -74,13 +74,13 @@ Add `--worktree <path>` when running from another directory. `review` takes the 
 **Rules:**
 - Do not finish a gate, ask for approval, mark a task done, or say anything is ready for review without running its hook and pasting its full output in your message.
 - Only `READY` passes a gate. Fix the document or code and run the hook again. Never edit the review tool or this script to get `READY`.
-- The hook does not run the tests. The named tests must also pass with the project's test command.
+- The `review` stage runs the named tests, so it takes as long as the review's checks.
 
 What each stage checks:
 - `spec`: the spec parses as review setup parses it, and every `Verification:` line names its tests and one test file the project has a test command for. It prints the requirement count and IDs.
 - `plan`: at `HEAD` of a clean checkout, every task file and its spec are committed and parse; every phase has tasks; every task lists requirements that exist in the spec, with readable `Verification:` lines; every recorded starting commit is a bare 40-character commit ID in `HEAD`'s history, in task order. A task that has not started may have an empty starting commit.
 - `staged`: what the pre-commit hook runs on the commit being made.
-- `review`: the review tool's setup (`scope.review_scope`) with no exceptions, including a starting commit for every task in scope. Then, for each requirement in scope, `uv run pytest --collect-only -q` on its test file collects each named test exactly once, as a bare `<test file>::<test name>`, with no other node of that name (`name[param]`, `Class::name`). Then `git grep` at the candidate finds no `parametrize`, `^class Test`, skip, or xfail in any tracked `.py` file. This also catches what a commit made with `--no-verify` let in. Then the checkout is still clean.
+- `review`: the review tool's setup (`scope.review_scope`) with no exceptions, including a starting commit for every task in scope. Then each requirement's check, run by the review tool's own code as the review runs it: in a temporary worktree at the candidate, the project's `setup` commands, the `build` and `test` commands declared for the test file's type in `[tool.evidence-based-review]` (pytest for `.py` when none is declared), and the report matched to each named test. A named test passes only when it is in the report exactly once and passed; missing, failed, skipped, or matched more than once fails. The project's `teardown` commands run at the end. Then `git grep` at the candidate finds no `parametrize`, `^class Test`, skip, or xfail in any tracked Python test file. This also catches what a commit made with `--no-verify` let in. Then the checkout is still clean.
 
 ### Phase 0: Scope Check
 
@@ -214,8 +214,8 @@ Don't silently fill in ambiguous requirements. The spec's entire purpose is to s
 - Requirements are the `- **<ID>:**` items under the `## Requirements` heading. An ID is a letter followed by letters, digits, dots, or hyphens.
 - The spec has exactly one `## Requirements` heading. Every non-blank line under it is either an item line or an indented continuation line of the item above. Introductory prose, notes, and tables go in another section. Any heading, including a `###` subheading, ends the section, so items under it are not read.
 - The text runs to the `Verification:` line, an indented continuation line. The verification runs to the next item or heading. Both must be present.
-- Every requirement is tested inside the project under test. The `Verification:` line names one test as a backticked `test...` identifier and one test file as a backticked path with its suffix, relative to the repository root. It contains no other backticked span with a dot in it, because the review reads every such span as a test file. A command, `diff`, manual check, or check outside the repository is not a verification.
-- A named test is one plain module-level function in that file, run once. Never parametrize it, put it in a test class, give it a parametrized fixture, or skip or xfail it. The review runs the test file and matches the name to exactly one JUnit test case by exact name. `name[param]` never matches. `Class::name` is not read as a test name, and one method name in two classes matches several cases, which stops the review. A skipped test also stops it. Kyle's rule for his projects: no parametrized tests and no test classes at all.
+- Every requirement is tested inside the project under test. The `Verification:` line names one or more tests as backticked identifiers starting with `test` or `Test`, and one test file as a backticked path with its suffix, relative to the repository root. The project must declare a test command for that file type in `[tool.evidence-based-review]` in `pyproject.toml`; only `.py` has a default (pytest). It contains no other backticked span with a dot in it, because the review reads every such span as a test file. A command, `diff`, manual check, or check outside the repository is not a verification.
+- In a `.py` file, a named test is one plain module-level function, run once. Never parametrize it, put it in a test class, give it a parametrized fixture, or skip or xfail it. The review runs the test file and matches the name to exactly one JUnit test case by exact name. `name[param]` never matches. `Class::name` is not read as a test name, and one method name in two classes matches several cases, which stops the review. A skipped test also stops it. Kyle's rule for his projects: no parametrized tests and no test classes at all.
 - A real run is acceptance evidence for a task, not a requirement. Put its expected result in the task's acceptance criteria.
 - An install is a release step, not a requirement.
 - IDs are unique within the spec and are never renumbered.
@@ -297,7 +297,7 @@ Execute tasks one at a time following `skills/incremental-implementation/SKILL.m
 
 Write each named verification test as one plain function whose single run proves its requirement (see Requirements format).
 
-**Implement hook, per task.** Record the task's starting commit before its work, commit the work, then run `uv run --project /home/kyleschuetz/evidence-based-review python /home/kyleschuetz/.agents/skills/spec-driven-development/scripts/review-readiness.py review task "<task file>#Task <n>" --candidate HEAD --task-file <task file>...` and paste its output. The task is not done until it ends with `READY` and the named tests pass.
+**Implement hook, per task.** Record the task's starting commit before its work, commit the work, then run `uv run --project /home/kyleschuetz/evidence-based-review python /home/kyleschuetz/.agents/skills/spec-driven-development/scripts/review-readiness.py review task "<task file>#Task <n>" --candidate HEAD --task-file <task file>...` and paste its output. The task is not done until it ends with `READY`.
 
 **Handoff hook.** Before saying work is ready for review, or starting `evidence-based-review review`, run the `review` stage with the exact level, target, candidate, and task files the review will get, and paste its output. It must end with `READY`.
 
@@ -344,7 +344,7 @@ Before proceeding to implementation, confirm:
 - [ ] The spec covers all six core areas
 - [ ] The human has reviewed and approved the spec
 - [ ] Success criteria are specific and testable
-- [ ] Every requirement has a stable ID and a `Verification:` line under `## Requirements` that names one test and its `.py` file in this project
+- [ ] Every requirement has a stable ID and a `Verification:` line under `## Requirements` that names its tests and one test file in this project, of a type the project has a test command for
 - [ ] The project's pre-commit hook is the link to `scripts/pre-commit`, and the spec and task file were committed through it
 - [ ] The Specify hook output is pasted and ends with `READY`
 - [ ] The Plan and Tasks hook output is pasted and ends with `READY`

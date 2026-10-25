@@ -13,14 +13,16 @@ Stages:
         Check every task file and its spec at HEAD of a clean worktree. A task that has not
         started may have an empty starting commit; every other rule applies.
     review <level> [<target>] --candidate <ref> --task-file <path>... [--worktree <path>]
-        The review command's own setup, then the named tests: each is collected exactly once
-        as a bare <test file>::<test name>, and no tracked .py file holds a parametrized test,
-        test class, skip, or xfail. Same arguments as `evidence-based-review review`.
+        The review command's own setup, then each requirement's check exactly as the review runs it
+        (project setup, the build and test command declared for the test file's type, the report
+        matched to each named test), in a temporary worktree at the candidate. Then no tracked Python
+        test file may hold a parametrized test, test class, skip, or xfail. Same arguments as
+        `evidence-based-review review`.
 
     staged
         The Git pre-commit hook (scripts/pre-commit). Checks the commit being made: each staged spec,
         each staged task file and each task file that links a staged spec, with the `plan` rules, and
-        every added line of a staged .py file for parametrize, test classes, skips, and xfails. Files
+        every added line of a staged Python test file for parametrize, test classes, skips, and xfails. Files
         that the commit does not touch are not checked.
 
 Prints one line per check, then READY or NOT READY. Exit code 0 only when READY.
@@ -33,19 +35,23 @@ from fnmatch import fnmatchcase
 import os
 import posixpath
 import re
+import shutil
 import subprocess
 import sys
+import tempfile
 from pathlib import Path, PurePosixPath
 
-from evidence_based_review.checks import read_check
-from evidence_based_review.records import Failure
+from evidence_based_review.checks import read_check, run_check
+from evidence_based_review.records import Failure, RecordStore
 from evidence_based_review.scope import (_PHASE, _SPEC_LINK, _baseline, _check_verifications, _git, _lines,
                                          _requirements,
                                          _tasks_in_scope, check_source, parse_spec, read_work, resolve_commit,
                                          review_scope)
-from evidence_based_review.agents import project_commands
+from evidence_based_review.agents import build_directory, project_commands, run_build, run_commands, run_setup
 
 FORBIDDEN = r"parametrize|^class Test|pytest\.mark\.(skip|skipif|xfail)|pytest\.(skip|xfail|importorskip)\("
+TEST_FILES = [":(glob)**/test_*.py", ":(glob)**/*_test.py", ":(glob)**/conftest.py", ":(glob)**/tests/**/*.py",
+              ":(glob)**/test/**/*.py"]
 failures: list[str] = []
 
 
@@ -131,7 +137,7 @@ def staged_stage(args) -> None:
                   "-m", "review readiness check of the staged tree").strip()
     staged = _git(worktree, "diff", "--cached", "--name-only", "--diff-filter=ACMR", "-z").split("\0")
     check_documents(worktree, commit, staged)
-    added = [line for line in _git(worktree, "diff", "--cached", "-U0", "--", "*.py").splitlines()
+    added = [line for line in _git(worktree, "diff", "--cached", "-U0", "--", *TEST_FILES).splitlines()
              if line.startswith("+") and not line.startswith("+++")]
     report("no parametrize, test classes, skips, or xfails added",
            lambda: forbidden_lines([line[1:] for line in added]))
@@ -165,7 +171,7 @@ def forbidden_lines(lines: list[str]):
     found = [line for line in lines if re.search(FORBIDDEN, line)]
     if found:
         raise Failure(f"{len(found)} added line(s); every test is one plain function, run once:\n" + "\n".join(found))
-    return None, f"{len(lines)} added .py lines checked"
+    return None, f"{len(lines)} added Python test lines checked"
 
 
 def review_stage(args) -> None:
@@ -178,16 +184,8 @@ def review_stage(args) -> None:
     definition = report("review setup", setup)
     if definition is None:
         return
-    named: dict[str, list[str]] = {}
-    for requirement in definition["requirements"]:
-        check = read_check(requirement["verification"])
-        named.setdefault(check["test_file"], [])
-        named[check["test_file"]] += [t for t in check["tests"] if t not in named[check["test_file"]]]
-    env = {key: value for key, value in os.environ.items() if key != "VIRTUAL_ENV"}
-    env["PYTHONDONTWRITEBYTECODE"] = "1"
-    for test_file, tests in named.items():
-        report(f"collect {test_file}", lambda: collect(worktree, env, test_file, tests))
-    report("no parametrize, test classes, skips, or xfails in any .py file",
+    run_named_checks(worktree, definition)
+    report("no parametrize, test classes, skips, or xfails in any Python test file",
            lambda: forbidden(worktree, definition["candidate"]))
 
     def clean():
@@ -197,30 +195,53 @@ def review_stage(args) -> None:
     report("worktree still clean", clean)
 
 
-def collect(worktree: Path, env: dict, test_file: str, tests: list[str]):
-    if PurePosixPath(test_file).suffix != ".py":
-        raise Failure(f"only .py test files can be collected here: {test_file}")
-    command = ["uv", "run", "pytest", "--collect-only", "-q", "-p", "no:cacheprovider", test_file]
-    run = subprocess.run(command, cwd=worktree, env=env, capture_output=True, text=True)
-    nodes = [line.strip() for line in run.stdout.splitlines() if "::" in line]
-    if run.returncode != 0:
-        raise Failure(f"{' '.join(command)} exited with {run.returncode}:\n{(run.stdout + run.stderr)[-3000:]}")
-    problems = []
-    for test in tests:
-        bare = f"{test_file}::{test}"
-        exact = nodes.count(bare)
-        others = [node for node in nodes if node != bare and node.split("::")[-1].split("[")[0] == test]
-        if exact != 1 or others:
-            problems.append(f"{test}: {bare} collected {exact} time(s)"
-                            + (f"; {len(others)} other node(s) with this name, such as {', '.join(others[:3])}" if others else ""))
-    if problems:
-        raise Failure("each named test must be collected exactly once as a bare <test file>::<test name>\n"
-                      + "\n".join(problems))
-    return None, ", ".join(f"{test_file}::{test}" for test in tests)
+def run_named_checks(repo: Path, definition: dict) -> None:
+    """Run each requirement's check as the review runs it: in a detached worktree at the candidate, the project's
+    setup before each check, the build of the test file's suffix once, then the review tool's own `run_check`, which
+    runs the declared test command for the suffix and matches each named test to one report case. Records go to a
+    temporary store, never to a review run."""
+    commit = definition["candidate"]
+    commands = project_commands(repo, commit)
+    temp = Path(tempfile.mkdtemp(prefix="review-readiness-"))
+    worktree = temp / f"review-{commit}"
+    store = RecordStore(temp / "records")
+    store.put("review_definition", definition)
+    _git(repo, "worktree", "add", "--quiet", "--detach", str(worktree), commit)
+    try:
+        for requirement in definition["requirements"]:
+            report(f"check {requirement['id']}", lambda: one_check(store, requirement, worktree, commit, commands))
+    finally:
+        def teardown():
+            if store.list("setup_run"):
+                run_commands(store, "teardown", worktree, commands["teardown"])
+            _git(repo, "worktree", "remove", "--force", str(worktree))
+            shutil.rmtree(temp)
+            return None, f"{len(commands['teardown'])} teardown commands; temporary worktree removed"
+
+        report("teardown", teardown)
+        if failures[-1:] == ["teardown"]:
+            print(f"     the temporary worktree stays at {worktree}")
+
+
+def one_check(store: RecordStore, requirement: dict, worktree: Path, commit: str, commands: dict):
+    run_setup(store, worktree, commands["setup"])
+    check = read_check(requirement["verification"])
+    suffix = PurePosixPath(check["test_file"]).suffix
+    build = None
+    if "build" in commands["tests"].get(suffix, {}):
+        build = build_directory(worktree, suffix)
+        if not build.exists():
+            run_build(store, worktree, suffix, commands)
+    body = store.get(run_check(store, requirement["id"], worktree, commit=commit, tests=commands["tests"],
+                               build=build))
+    results = ", ".join(f"{test} {result}" for test, result in body["results"].items())
+    if body["status"] != "passed":
+        raise Failure(f"{check['test_file']}: {results}\n{body['output'][-2000:]}")
+    return None, f"{check['test_file']}: {results}"
 
 
 def forbidden(worktree: Path, commit: str):
-    command = ["git", "-C", str(worktree), "grep", "-n", "-E", FORBIDDEN, commit, "--", "*.py"]
+    command = ["git", "-C", str(worktree), "grep", "-n", "-E", FORBIDDEN, commit, "--", *TEST_FILES]
     run = subprocess.run(command, capture_output=True, text=True)
     if run.returncode == 1:
         return None, "git grep found nothing"
