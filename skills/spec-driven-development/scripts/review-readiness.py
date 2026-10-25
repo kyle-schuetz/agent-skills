@@ -14,8 +14,8 @@ Stages:
         started may have an empty starting commit; every other rule applies.
     review <level> [<target>] --candidate <ref> --task-file <path>... [--worktree <path>]
         The review command's own setup, then the named tests: each is collected exactly once
-        as a bare <test file>::<test name>, and the test folders hold no parametrized tests,
-        test classes, skips, or xfails. Same arguments as `evidence-based-review review`.
+        as a bare <test file>::<test name>, and no tracked .py file holds a parametrized test,
+        test class, skip, or xfail. Same arguments as `evidence-based-review review`.
 
     staged
         The Git pre-commit hook (scripts/pre-commit). Checks the commit being made: every staged
@@ -177,9 +177,8 @@ def review_stage(args) -> None:
     env["PYTHONDONTWRITEBYTECODE"] = "1"
     for test_file, tests in named.items():
         report(f"collect {test_file}", lambda: collect(worktree, env, test_file, tests))
-    folders = sorted({str(PurePosixPath(test_file).parent) for test_file in named})
-    report("no parametrize, test classes, skips, or xfails in " + ", ".join(folders),
-           lambda: forbidden(worktree, definition["candidate"], folders))
+    report("no parametrize, test classes, skips, or xfails in any .py file",
+           lambda: forbidden(worktree, definition["candidate"]))
 
     def clean():
         check_source(worktree, definition["candidate"])
@@ -210,8 +209,8 @@ def collect(worktree: Path, env: dict, test_file: str, tests: list[str]):
     return None, ", ".join(f"{test_file}::{test}" for test in tests)
 
 
-def forbidden(worktree: Path, commit: str, folders: list[str]):
-    command = ["git", "-C", str(worktree), "grep", "-n", "-E", FORBIDDEN, commit, "--", *folders]
+def forbidden(worktree: Path, commit: str):
+    command = ["git", "-C", str(worktree), "grep", "-n", "-E", FORBIDDEN, commit, "--", "*.py"]
     run = subprocess.run(command, capture_output=True, text=True)
     if run.returncode == 1:
         return None, "git grep found nothing"
