@@ -33,7 +33,30 @@ SPECIFY ──→ PLAN ──→ TASKS ──→ IMPLEMENT
 
 ### Review Readiness Hooks
 
-The evidence-based review tool reads the spec, the task files, and the test reports exactly. A document that looks right can still stop the review at setup or during the run. Each gate below therefore has a hook: one command that runs the review tool's own parser and setup code (`scripts/review-readiness.py`, run in the tool's environment).
+The evidence-based review tool reads the spec, the task files, and the test reports exactly. A document that looks right can still stop the review at setup or during the run. The checks below run the review tool's own parser and setup code (`scripts/review-readiness.py`, run in the tool's environment).
+
+**Commit gate.** A phase that creates the spec or the task file ends only when that file is committed. The project's Git pre-commit hook (`scripts/pre-commit`) runs `review-readiness.py staged` on every commit and refuses the commit when:
+- a staged spec does not parse as review setup parses it, or a `Verification:` line cannot be read;
+- any task file in the commit breaks a review setup rule (the `plan` rules below), including after a spec change removes a requirement a task lists;
+- a staged `.py` file adds a `parametrize`, a `class Test`, a skip, or an xfail.
+
+A refused commit means the phase has not ended. Fix the file and commit again.
+
+Before Phase 1 writes anything, check that the hook is installed:
+
+```
+ls -l "$(git rev-parse --git-common-dir)/hooks/pre-commit"
+```
+
+It must be a link to `/home/kyleschuetz/.agents/skills/spec-driven-development/scripts/pre-commit`. If it is missing, install it:
+
+```
+ln -s /home/kyleschuetz/.agents/skills/spec-driven-development/scripts/pre-commit "$(git rev-parse --git-common-dir)/hooks/pre-commit"
+```
+
+If another pre-commit hook is already there, stop and ask the human. Never commit with `--no-verify`, and never remove, replace, or edit the hook.
+
+The commands below run the same checks by hand, plus the named-test collection that a commit does not run:
 
 | Gate | When | Command, run from the project checkout |
 |---|---|---|
@@ -54,6 +77,7 @@ Add `--worktree <path>` when running from another directory. `review` takes the 
 What each stage checks:
 - `spec`: the spec parses as review setup parses it, and every `Verification:` line names its tests and one test file the project has a test command for. It prints the requirement count and IDs.
 - `plan`: at `HEAD` of a clean checkout, every task file and its spec are committed and parse; every phase has tasks; every task lists requirements that exist in the spec, with readable `Verification:` lines; every recorded starting commit is a bare 40-character commit ID in `HEAD`'s history, in task order. A task that has not started may have an empty starting commit.
+- `staged`: what the pre-commit hook runs on the commit being made.
 - `review`: the review tool's setup (`scope.review_scope`) with no exceptions, including a starting commit for every task in scope. Then, for each requirement in scope, `uv run pytest --collect-only -q` on its test file collects each named test exactly once, as a bare `<test file>::<test name>`, with no other node of that name (`name[param]`, `Class::name`). Then `git grep` at the candidate finds no `parametrize`, `^class Test`, skip, or xfail in the folders of the named test files. Then the checkout is still clean.
 
 ### Phase 0: Scope Check
@@ -210,7 +234,7 @@ REFRAMED SUCCESS CRITERIA:
 
 This lets you loop, retry, and problem-solve toward a clear goal rather than guessing what "faster" means.
 
-**Specify hook.** Before asking the human to approve the spec, run `uv run --project /home/kyleschuetz/evidence-based-review python /home/kyleschuetz/.agents/skills/spec-driven-development/scripts/review-readiness.py spec <spec file>` and paste its output. It must end with `READY`.
+**Specify hook.** Commit the spec; the pre-commit hook checks it. Before asking the human to approve the spec, also run `uv run --project /home/kyleschuetz/evidence-based-review python /home/kyleschuetz/.agents/skills/spec-driven-development/scripts/review-readiness.py spec <spec file>` and paste its output. It must end with `READY`.
 
 ### Phase 2: Plan
 
@@ -305,6 +329,7 @@ The spec is a living document, not a one-time artifact:
 - Implementing features not mentioned in any spec or task list
 - Making architectural decisions without documenting them
 - Saying a spec, task, or piece of work is done or ready for review without pasted hook output that ends with `READY`
+- A commit made with `--no-verify`, or a project with no readiness pre-commit hook
 - A named verification test that is parametrized, inside a test class, or skipped
 - Skipping the spec because "it's obvious what to build"
 - One spec whose requirements span several independently testable capabilities
@@ -318,6 +343,7 @@ Before proceeding to implementation, confirm:
 - [ ] The human has reviewed and approved the spec
 - [ ] Success criteria are specific and testable
 - [ ] Every requirement has a stable ID and a `Verification:` line under `## Requirements` that names one test and its `.py` file in this project
+- [ ] The project's pre-commit hook is the link to `scripts/pre-commit`, and the spec and task file were committed through it
 - [ ] The Specify hook output is pasted and ends with `READY`
 - [ ] The Plan and Tasks hook output is pasted and ends with `READY`
 - [ ] Boundaries (Always/Ask First/Never) are defined

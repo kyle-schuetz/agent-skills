@@ -1,0 +1,4 @@
+#!/bin/sh
+# Git pre-commit hook: refuse a commit whose spec, task files, or tests the evidence-based review tool would reject.
+# Install in a project: ln -s /home/kyleschuetz/.agents/skills/spec-driven-development/scripts/pre-commit "$(git rev-parse --git-common-dir)/hooks/pre-commit"
+exec uv run --project /home/kyleschuetz/evidence-based-review python /home/kyleschuetz/.agents/skills/spec-driven-development/scripts/review-readiness.py staged

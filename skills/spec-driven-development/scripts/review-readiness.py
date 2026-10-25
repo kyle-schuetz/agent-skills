@@ -17,6 +17,11 @@ Stages:
         as a bare <test file>::<test name>, and the test folders hold no parametrized tests,
         test classes, skips, or xfails. Same arguments as `evidence-based-review review`.
 
+    staged
+        The Git pre-commit hook (scripts/pre-commit). Checks the commit being made: every staged
+        spec and every task file in the staged tree, with the `plan` rules, and every added line
+        of a staged .py file for parametrize, test classes, skips, and xfails.
+
 Prints one line per check, then READY or NOT READY. Exit code 0 only when READY.
 """
 
@@ -25,14 +30,16 @@ from __future__ import annotations
 import argparse
 import os
 import posixpath
+import re
 import subprocess
 import sys
 from pathlib import Path, PurePosixPath
 
 from evidence_based_review.checks import read_check
 from evidence_based_review.records import Failure
-from evidence_based_review.scope import (_baseline, _check_verifications, _requirements, _tasks_in_scope,
-                                         check_source, parse_spec, read_work, resolve_commit, review_scope)
+from evidence_based_review.scope import (_baseline, _check_verifications, _git, _lines, _requirements,
+                                         _tasks_in_scope, check_source, parse_spec, read_work, resolve_commit,
+                                         review_scope)
 from evidence_based_review.agents import project_commands
 
 FORBIDDEN = r"parametrize|^class Test|pytest\.mark\.(skip|skipif|xfail)|pytest\.(skip|xfail|importorskip)\("
@@ -54,9 +61,12 @@ def report(name: str, check) -> object:
 def spec_stage(args) -> None:
     worktree = Path(args.worktree).resolve()
     path = posixpath.normpath(args.spec)
+    check_spec(worktree, resolve_commit(worktree, "HEAD"), path, (worktree / path).read_text())
 
+
+def check_spec(worktree: Path, commit: str, path: str, text: str) -> None:
     def parse():
-        requirements = parse_spec(path, (worktree / path).read_text())
+        requirements = parse_spec(path, text)
         return requirements, f"{len(requirements)} requirements: " + ", ".join(
             r.rsplit("#", 1)[1] for r in requirements)
 
@@ -65,7 +75,7 @@ def spec_stage(args) -> None:
         return
 
     def verifications():
-        tests = project_commands(worktree, resolve_commit(worktree, "HEAD"))["tests"]
+        tests = project_commands(worktree, commit)["tests"]
         unreadable = []
         for qualified, requirement in requirements.items():
             try:
@@ -78,28 +88,69 @@ def spec_stage(args) -> None:
             raise Failure("\n".join(unreadable))
         return None, f"all {len(requirements)} Verification lines name tests and one test file"
 
-    report("Verification lines", verifications)
+    report(f"Verification lines in {path}", verifications)
 
 
 def plan_stage(args) -> None:
     worktree = Path(args.worktree).resolve()
 
-    def check():
+    def clean_head():
         commit = resolve_commit(worktree, "HEAD")
         check_source(worktree, commit)
-        work = read_work(worktree, commit, args.task_files)
-        tasks = _tasks_in_scope("full_work", None, work["task_files"])
-        requirements = _requirements(tasks, work["specs"], commit)
-        _check_verifications(requirements, worktree, commit)
-        started = [task for task in tasks if task["starting_commit"] is not None]
-        if started:
-            _baseline(worktree, started, commit)
-        phases = sum(len(task_file["phases"]) for task_file in work["task_files"])
-        return None, (f"at {commit}: {phases} phases, {len(tasks)} tasks, {len(requirements)} requirements"
-                      f" in scope, {len(started)} tasks with a starting commit, {len(tasks) - len(started)}"
-                      " not started")
+        return commit, f"HEAD {commit} has no uncommitted or untracked changes"
 
-    report("task files and specs at HEAD", check)
+    commit = report("clean checkout", clean_head)
+    if commit is not None:
+        report("task files and specs at HEAD", lambda: check_work(worktree, commit, args.task_files))
+
+
+def check_work(worktree: Path, commit: str, task_files: list[str]):
+    """The review tool's setup rules for all tasks at `commit`, except that a task not started may have an empty
+    starting commit."""
+    work = read_work(worktree, commit, task_files)
+    tasks = _tasks_in_scope("full_work", None, work["task_files"])
+    requirements = _requirements(tasks, work["specs"], commit)
+    _check_verifications(requirements, worktree, commit)
+    started = [task for task in tasks if task["starting_commit"] is not None]
+    if started:
+        _baseline(worktree, started, commit)
+    phases = sum(len(task_file["phases"]) for task_file in work["task_files"])
+    return None, (f"{', '.join(task_files)}: {phases} phases, {len(tasks)} tasks, {len(requirements)} requirements,"
+                  f" {len(started)} tasks with a starting commit, {len(tasks) - len(started)} not started")
+
+
+def staged_stage(args) -> None:
+    worktree = Path(_git(Path.cwd(), "rev-parse", "--show-toplevel").strip())
+    tree = _git(worktree, "write-tree").strip()
+    parent = subprocess.run(["git", "-C", str(worktree), "rev-parse", "--verify", "-q", "HEAD"],
+                            capture_output=True, text=True).stdout.strip()
+    commit = _git(worktree, "commit-tree", tree, *(["-p", parent] if parent else []),
+                  "-m", "review readiness check of the staged tree").strip()
+    staged = _git(worktree, "diff", "--cached", "--name-only", "--diff-filter=ACMR", "-z").split("\0")
+    markdown = [path for path in _git(worktree, "ls-tree", "-r", "--name-only", "-z", commit).split("\0")
+                if path.endswith(".md")]
+    task_files, specs = [], []
+    for path in markdown:
+        lines = list(_lines(_git(worktree, "show", f"{commit}:{path}")))
+        if any(line.startswith("**Spec:**") for line in lines):
+            task_files.append(path)
+        if path in staged and any(line.rstrip() == "## Requirements" for line in lines):
+            specs.append(path)
+    for path in specs:
+        check_spec(worktree, commit, path, _git(worktree, "show", f"{commit}:{path}"))
+    if task_files and any(path in staged for path in task_files + specs):
+        report("task files and specs in this commit", lambda: check_work(worktree, commit, task_files))
+    added = [line for line in _git(worktree, "diff", "--cached", "-U0", "--", "*.py").splitlines()
+             if line.startswith("+") and not line.startswith("+++")]
+    report("no parametrize, test classes, skips, or xfails added",
+           lambda: forbidden_lines([line[1:] for line in added]))
+
+
+def forbidden_lines(lines: list[str]):
+    found = [line for line in lines if re.search(FORBIDDEN, line)]
+    if found:
+        raise Failure(f"{len(found)} added line(s); every test is one plain function, run once:\n" + "\n".join(found))
+    return None, f"{len(lines)} added .py lines checked"
 
 
 def review_stage(args) -> None:
@@ -180,8 +231,9 @@ def main() -> int:
     review.add_argument("--task-file", action="append", required=True, dest="task_files")
     for stage in (spec, plan, review):
         stage.add_argument("--worktree", default=".")
+    stages.add_parser("staged")
     args = parser.parse_args()
-    {"spec": spec_stage, "plan": plan_stage, "review": review_stage}[args.stage](args)
+    {"spec": spec_stage, "plan": plan_stage, "review": review_stage, "staged": staged_stage}[args.stage](args)
     print("READY" if not failures else f"NOT READY: {len(failures)} failed: {', '.join(failures)}")
     return 0 if not failures else 1
 
