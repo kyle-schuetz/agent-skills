@@ -112,12 +112,23 @@ Write tasks in the task list target (see Output Files). The file links its spec 
 
 Review setup reads these fields from the task file as committed, so follow them exactly:
 
-- `**Spec:**` appears once and links the spec, relative to the task file's folder.
-- A phase is a `## Phase <n>: <title>` heading. Its tasks are the `### Task <n>: <title>` headings under it, up to the next `## ` heading, such as a checkpoint.
-- Phase and task numbers are unique within the file.
-- `**Requirements:**` lists the IDs of the spec requirements the task covers, separated by commas. Every task lists at least one.
-- `**Starting commit:**` is the full ID of `HEAD` when the task starts. It is recorded in the task file, and that edit is committed with the task's work. Recording it does not change what was approved, like ticking a checkbox.
+- `**Spec:**` appears once, as the whole line `**Spec:** [title](path)`, and links the spec, relative to the task file's folder.
+- A phase is a `## Phase <n>: <title>` heading. Its tasks are the `### Task <n>: <title>` headings under it, up to the next `## ` heading, such as a checkpoint. A task heading after a checkpoint and before the next phase heading stops review setup.
+- Any other heading inside a task, such as `#### Notes`, ends the task. Put `**Requirements:**` and `**Starting commit:**` directly under the task heading, before any other heading.
+- Phase and task numbers are unique within the file. Every phase has at least one task.
+- `**Requirements:**` lists the IDs of the spec requirements the task covers, separated by commas, with no other text. Every task lists at least one, and each ID exists in the spec.
+- `**Starting commit:**` is the full ID of `HEAD` when the task starts: the bare 40-character ID, with no backticks, short ID, branch name, or other text. It is recorded in the task file, and that edit is committed with the task's work. Recording it does not change what was approved, like ticking a checkbox. Starting commits follow task order.
+- Each of these two lines appears once per task.
 - Work with one spec uses one task file with one or more phases. Work split into one spec per module uses one task file per module, each with its own phases.
+- Review setup reads the task file and spec as committed, from a checkout with no uncommitted or untracked files.
+
+**Hook.** Commit the task file with its spec. From a clean checkout, run this and paste its full output. Do not ask for approval or call the tasks ready until it ends with `READY`:
+
+```
+uv run --project /home/kyleschuetz/evidence-based-review python /home/kyleschuetz/.agents/skills/spec-driven-development/scripts/review-readiness.py plan --task-file <task file>...
+```
+
+It runs the review tool's own task-file and spec parsing at `HEAD`. A task that has not started may have an empty starting commit; every other rule above is checked. The later hooks, per task and before review, are in `spec-driven-development` (Review Readiness Hooks).
 
 ### Step 5: Order and Checkpoint
 
@@ -230,6 +241,8 @@ When multiple agents or sessions are available:
 - Overwriting a `tasks/plan.md` or `tasks/todo.md` that still has unchecked tasks for different work, without asking
 - Keeping tasks only in a tracker, or letting a tracker and the task file disagree
 - Tasks without `**Requirements:**` IDs from the spec
+- Calling a task file ready without pasted `plan` hook output that ends with `READY`
+- A starting commit written in backticks or as a short ID
 - Tasks that say "implement the feature" without acceptance criteria
 - No verification steps in the plan
 - All tasks are XL-sized
@@ -245,6 +258,7 @@ Before starting implementation, confirm:
 - [ ] Task dependencies are identified and ordered correctly
 - [ ] Tasks are recorded in the task list target (default `tasks/todo.md`)
 - [ ] Every task lists the spec requirement IDs it covers, and tasks sit under `## Phase` headings
+- [ ] The `plan` hook output is pasted and ends with `READY`
 - [ ] No pre-existing incomplete plan was overwritten without explicit user confirmation
 - [ ] No task touches more than ~5 files
 - [ ] Checkpoints exist between major phases

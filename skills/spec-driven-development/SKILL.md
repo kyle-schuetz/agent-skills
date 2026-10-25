@@ -31,6 +31,31 @@ SPECIFY ──→ PLAN ──→ TASKS ──→ IMPLEMENT
  reviews    reviews  reviews    reviews
 ```
 
+### Review Readiness Hooks
+
+The evidence-based review tool reads the spec, the task files, and the test reports exactly. A document that looks right can still stop the review at setup or during the run. Each gate below therefore has a hook: one command that runs the review tool's own parser and setup code (`scripts/review-readiness.py`, run in the tool's environment).
+
+| Gate | When | Command, run from the project checkout |
+|---|---|---|
+| Specify | After the spec is written, before asking for approval | `uv run --project /home/kyleschuetz/evidence-based-review python /home/kyleschuetz/.agents/skills/spec-driven-development/scripts/review-readiness.py spec <spec file>` |
+| Plan and Tasks | After the spec, plan, and task file are committed, from a clean checkout | `uv run --project /home/kyleschuetz/evidence-based-review python /home/kyleschuetz/.agents/skills/spec-driven-development/scripts/review-readiness.py plan --task-file <task file>...` |
+| Implement | After each task's work is committed | `uv run --project /home/kyleschuetz/evidence-based-review python /home/kyleschuetz/.agents/skills/spec-driven-development/scripts/review-readiness.py review task "<task file>#Task <n>" --candidate HEAD --task-file <task file>...` |
+| Handoff to review | Before saying the work is ready for review, with the arguments the review will get | `uv run --project /home/kyleschuetz/evidence-based-review python /home/kyleschuetz/.agents/skills/spec-driven-development/scripts/review-readiness.py review <level> [<target>] --candidate <ref> --task-file <task file>...` |
+
+Add `--worktree <path>` when running from another directory. `review` takes the same arguments as `evidence-based-review review`.
+
+**Expected output:** one `PASS` line per check, then `READY`, exit code 0. Any `FAIL` line ends with `NOT READY` and exit code 1; the lines under it are the review tool's own message.
+
+**Rules:**
+- Do not finish a gate, ask for approval, mark a task done, or say anything is ready for review without running its hook and pasting its full output in your message.
+- Only `READY` passes a gate. Fix the document or code and run the hook again. Never edit the review tool or this script to get `READY`.
+- The hook does not run the tests. The named tests must also pass with the project's test command.
+
+What each stage checks:
+- `spec`: the spec parses as review setup parses it, and every `Verification:` line names its tests and one test file the project has a test command for. It prints the requirement count and IDs.
+- `plan`: at `HEAD` of a clean checkout, every task file and its spec are committed and parse; every phase has tasks; every task lists requirements that exist in the spec, with readable `Verification:` lines; every recorded starting commit is a bare 40-character commit ID in `HEAD`'s history, in task order. A task that has not started may have an empty starting commit.
+- `review`: the review tool's setup (`scope.review_scope`) with no exceptions, including a starting commit for every task in scope. Then, for each requirement in scope, `uv run pytest --collect-only -q` on its test file collects each named test exactly once, as a bare `<test file>::<test name>`, with no other node of that name (`name[param]`, `Class::name`). Then `git grep` at the candidate finds no `parametrize`, `^class Test`, skip, or xfail in the folders of the named test files. Then the checkout is still clean.
+
 ### Phase 0: Scope Check
 
 Most requests describe one capability. If this one does, skip this phase and go straight to Specify — Phase 0 exists for the exception, not the rule, and it puts no hierarchy on single-capability features.
@@ -161,8 +186,10 @@ Don't silently fill in ambiguous requirements. The spec's entire purpose is to s
 ```
 
 - Requirements are the `- **<ID>:**` items under the `## Requirements` heading. An ID is a letter followed by letters, digits, dots, or hyphens.
-- The text runs to the `Verification:` line. The verification runs to the next item or heading. Both must be present.
-- Every requirement is tested inside the project under test. The `Verification:` line names one test as a backticked `test...` identifier and one test file as a backticked `.py` path. A command, `diff`, manual check, or check outside the repository is not a verification.
+- The spec has exactly one `## Requirements` heading. Every non-blank line under it is either an item line or an indented continuation line of the item above. Introductory prose, notes, and tables go in another section. Any heading, including a `###` subheading, ends the section, so items under it are not read.
+- The text runs to the `Verification:` line, an indented continuation line. The verification runs to the next item or heading. Both must be present.
+- Every requirement is tested inside the project under test. The `Verification:` line names one test as a backticked `test...` identifier and one test file as a backticked path with its suffix, relative to the repository root. It contains no other backticked span with a dot in it, because the review reads every such span as a test file. A command, `diff`, manual check, or check outside the repository is not a verification.
+- A named test is one plain module-level function in that file, run once. Never parametrize it, put it in a test class, give it a parametrized fixture, or skip or xfail it. The review runs the test file and matches the name to exactly one JUnit test case by exact name. `name[param]` never matches. `Class::name` is not read as a test name, and one method name in two classes matches several cases, which stops the review. A skipped test also stops it. Kyle's rule for his projects: no parametrized tests and no test classes at all.
 - A real run is acceptance evidence for a task, not a requirement. Put its expected result in the task's acceptance criteria.
 - An install is a release step, not a requirement.
 - IDs are unique within the spec and are never renumbered.
@@ -182,6 +209,8 @@ REFRAMED SUCCESS CRITERIA:
 ```
 
 This lets you loop, retry, and problem-solve toward a clear goal rather than guessing what "faster" means.
+
+**Specify hook.** Before asking the human to approve the spec, run `uv run --project /home/kyleschuetz/evidence-based-review python /home/kyleschuetz/.agents/skills/spec-driven-development/scripts/review-readiness.py spec <spec file>` and paste its output. It must end with `READY`.
 
 ### Phase 2: Plan
 
@@ -232,9 +261,19 @@ Break the plan into discrete, implementable tasks:
 - [Which files will be touched]
 ```
 
+The task file rules are in `planning-and-task-breakdown` (Step 4). The one that fails most often: `**Starting commit:**` is the bare 40-character ID, with no backticks or other text.
+
+**Plan and Tasks hook.** Commit the spec, plan, and task file. From a clean checkout, run `uv run --project /home/kyleschuetz/evidence-based-review python /home/kyleschuetz/.agents/skills/spec-driven-development/scripts/review-readiness.py plan --task-file <task file>...` and paste its output. It must end with `READY` before you ask the human to approve the tasks.
+
 ### Phase 4: Implement
 
 Execute tasks one at a time following `skills/incremental-implementation/SKILL.md` (`incremental-implementation`) and `skills/test-driven-development/SKILL.md` (`test-driven-development`). Use `skills/context-engineering/SKILL.md` (`context-engineering`) to load the right spec sections and source files at each step rather than flooding the agent with the entire spec.
+
+Write each named verification test as one plain function whose single run proves its requirement (see Requirements format).
+
+**Implement hook, per task.** Record the task's starting commit before its work, commit the work, then run `uv run --project /home/kyleschuetz/evidence-based-review python /home/kyleschuetz/.agents/skills/spec-driven-development/scripts/review-readiness.py review task "<task file>#Task <n>" --candidate HEAD --task-file <task file>...` and paste its output. The task is not done until it ends with `READY` and the named tests pass.
+
+**Handoff hook.** Before saying work is ready for review, or starting `evidence-based-review review`, run the `review` stage with the exact level, target, candidate, and task files the review will get, and paste its output. It must end with `READY`.
 
 ## Keeping the Spec Alive
 
@@ -255,6 +294,8 @@ The spec is a living document, not a one-time artifact:
 | "Requirements will change anyway" | That's why the spec is a living document. An outdated spec is still better than no spec. |
 | "The user knows what they want" | Even clear requests have implicit assumptions. The spec surfaces those assumptions. |
 | "It's one big feature; splitting it is overhead" | If acceptance criteria cluster into independently testable groups, a monolithic spec forces every downstream task to reason over the whole contract. A ten-line capability map is the cheap alternative. |
+| "I read the spec and task file; the format is right" | Reading is not checking. Three reviews failed at setup or mid-run on formats that looked right. Run the hook and paste its output. |
+| "The test is parametrized, but the base name is the one in the spec" | The review matches the exact name to one test case. `name[param]` never matches. Write one plain function. |
 | "I'll decompose during planning" | Planning slices tasks within a spec. By then the oversized artifact already exists — module boundaries and dependency direction must be decided before the spec is written, not after. |
 
 ## Red Flags
@@ -263,6 +304,8 @@ The spec is a living document, not a one-time artifact:
 - Asking "should I just start building?" before clarifying what "done" means
 - Implementing features not mentioned in any spec or task list
 - Making architectural decisions without documenting them
+- Saying a spec, task, or piece of work is done or ready for review without pasted hook output that ends with `READY`
+- A named verification test that is parametrized, inside a test class, or skipped
 - Skipping the spec because "it's obvious what to build"
 - One spec whose requirements span several independently testable capabilities
 - Module boundaries or build order decided implicitly during implementation because no capability map was approved up front
@@ -275,6 +318,8 @@ Before proceeding to implementation, confirm:
 - [ ] The human has reviewed and approved the spec
 - [ ] Success criteria are specific and testable
 - [ ] Every requirement has a stable ID and a `Verification:` line under `## Requirements` that names one test and its `.py` file in this project
+- [ ] The Specify hook output is pasted and ends with `READY`
+- [ ] The Plan and Tasks hook output is pasted and ends with `READY`
 - [ ] Boundaries (Always/Ask First/Never) are defined
 - [ ] The spec is saved to a file in the repository
 - [ ] If the request bundles several independently testable capabilities, a capability map (module ids, dependency direction, build order) was approved before any module spec was written
