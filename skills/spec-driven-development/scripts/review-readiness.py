@@ -171,8 +171,9 @@ def check_documents(worktree: Path, commit: str, staged: list[str]) -> None:
     task_files = [path for path, targets in links.items() if path in staged or set(targets) & set(specs)]
     for path in specs:
         check_spec(worktree, commit, path, _git(worktree, "show", f"{commit}:{path}"))
-    if task_files:
-        report("task files in this commit", lambda: check_work(worktree, commit, task_files))
+    # One check per task file: a commit can touch task files of unrelated work; plan and review check order across one work's files.
+    for path in task_files:
+        report(f"task file {path} in this commit", lambda path=path: check_work(worktree, commit, [path]))
 
 
 def forbidden_lines(lines: list[str]):
