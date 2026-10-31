@@ -135,7 +135,13 @@ def staged_stage(args) -> None:
     tree = _git(worktree, "write-tree").strip()
     parent = subprocess.run(["git", "-C", str(worktree), "rev-parse", "--verify", "-q", "HEAD"],
                             capture_output=True, text=True).stdout.strip()
-    commit = _git(worktree, "commit-tree", tree, *(["-p", parent] if parent else []),
+    parents = [parent] if parent else []
+    merging = subprocess.run(["git", "-C", str(worktree), "rev-parse", "-q", "--verify", "MERGE_HEAD"],
+                             capture_output=True, text=True).returncode == 0
+    if merging:
+        merge_head = Path(_git(worktree, "rev-parse", "--path-format=absolute", "--git-path", "MERGE_HEAD").strip())
+        parents += merge_head.read_text().split()
+    commit = _git(worktree, "commit-tree", tree, *[arg for sha in parents for arg in ("-p", sha)],
                   "-m", "review readiness check of the staged tree").strip()
     staged = _git(worktree, "diff", "--cached", "--name-only", "--diff-filter=ACMR", "-z").split("\0")
     check_documents(worktree, commit, staged)
