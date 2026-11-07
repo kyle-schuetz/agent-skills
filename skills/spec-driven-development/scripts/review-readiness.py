@@ -96,14 +96,17 @@ def check_spec(worktree: Path, commit: str, path: str, text: str) -> None:
         unreadable = []
         for qualified, requirement in requirements.items():
             try:
-                suffix = PurePosixPath(read_check(requirement["verification"])["test_file"]).suffix
+                check = read_check(requirement["verification"])
+                if "command" in check:
+                    continue
+                suffix = PurePosixPath(check["test_file"]).suffix
                 if suffix not in tests:
                     raise Failure(f"no test command for {suffix} files")
             except Failure as failure:
                 unreadable.append(f"{qualified}: {failure}")
         if unreadable:
             raise Failure("\n".join(unreadable))
-        return None, f"all {len(requirements)} Verification lines name tests and one test file"
+        return None, f"all {len(requirements)} Verification lines name tests and one test file, or one command"
 
     report(f"Verification lines in {path}", verifications)
 
@@ -235,18 +238,21 @@ def run_named_checks(repo: Path, definition: dict) -> None:
 def one_check(store: RecordStore, requirement: dict, worktree: Path, commit: str, commands: dict):
     run_setup(store, worktree, commands["setup"])
     check = read_check(requirement["verification"])
-    suffix = PurePosixPath(check["test_file"]).suffix
+    suffix = PurePosixPath(check.get("test_file", "")).suffix
     build = None
-    if "build" in commands["tests"].get(suffix, {}):
+    if "command" not in check and "build" in commands["tests"].get(suffix, {}):
         build = build_directory(worktree, suffix)
         if not build.exists():
             run_build(store, worktree, suffix, commands)
     body = store.get(run_check(store, requirement["id"], worktree, commit=commit, tests=commands["tests"],
                                build=build))
     results = ", ".join(f"{test} {result}" for test, result in body["results"].items())
+    label = check.get("test_file") or f"command `{check.get('command')}`"
     if body["status"] != "passed":
-        raise Failure(f"{check['test_file']}: {results}\n{body['output'][-2000:]}")
-    return None, f"{check['test_file']}: {results}"
+        output = "\n".join(f"{name} at {run['commit']}, exit {run['exit_code']}:\n{run['output'][-1000:]}"
+                           for name, run in body.get("runs", {}).items()) or body["output"][-2000:]
+        raise Failure(f"{label}: {results}\n{output}")
+    return None, f"{label}: {results}"
 
 
 def forbidden(worktree: Path, commit: str):

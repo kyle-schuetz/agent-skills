@@ -78,7 +78,7 @@ Add `--worktree <path>` when running from another directory. `review` takes the 
 - The `review` stage runs the named tests, so it takes as long as the review's checks.
 
 What each stage checks:
-- `spec`: at `HEAD` of a clean checkout, the committed spec parses as review setup parses it, and every `Verification:` line names its tests and one test file the project has a test command for. It prints the requirement count and IDs.
+- `spec`: at `HEAD` of a clean checkout, the committed spec parses as review setup parses it, and every `Verification:` line names its tests and one test file the project has a test command for, or one command. It prints the requirement count and IDs.
 - `plan`: at `HEAD` of a clean checkout, every task file and its spec are committed and parse; every phase has tasks; every task lists requirements that exist in the spec, with readable `Verification:` lines; every recorded starting commit is a bare 40-character commit ID in `HEAD`'s history, in task order. A task that has not started may have an empty starting commit.
 - `staged`: what the pre-commit hook runs on the commit being made.
 - `review`: the review tool's setup (`scope.review_scope`) with no exceptions, including a starting commit for every task in scope. Then each requirement's check, run by the review tool's own code as the review runs it: in a temporary worktree at the candidate, the project's `setup` commands, the `build` and `test` commands declared for the test file's type in `[tool.evidence-based-review]` (pytest for `.py` when none is declared), and the report matched to each named test. A named test passes only when it is in the report exactly once and passed; missing, failed, skipped, or matched more than once fails. The project's `teardown` commands run at the end. Then `git grep` at the candidate finds no `parametrize`, `^class Test`, skip, or xfail in any tracked Python test file. This also catches what a commit made with `--no-verify` let in. Then the checkout is still clean.
@@ -174,7 +174,7 @@ Don't silently fill in ambiguous requirements. The spec's entire purpose is to s
 
 ## Requirements
 - **R1:** [What must be true. One testable statement.]
-  Verification: [The test in this project that proves it, e.g. `test_name` in `tests/test_file.py`.]
+  Verification: [The test in this project that proves it, e.g. `test_name` in `tests/test_file.py`; or, for a one-time change, one command, e.g. command `! git grep -n -w old_name -- src tests`.]
 
 ## Tech Stack
 [Framework, language, key dependencies with versions]
@@ -215,7 +215,10 @@ Don't silently fill in ambiguous requirements. The spec's entire purpose is to s
 - Requirements are the `- **<ID>:**` items under the `## Requirements` heading. An ID is a letter followed by letters, digits, dots, or hyphens.
 - The spec has exactly one `## Requirements` heading. Every non-blank line under it is either an item line or an indented continuation line of the item above. Introductory prose, notes, and tables go in another section. Any heading, including a `###` subheading, ends the section, so items under it are not read.
 - The text runs to the `Verification:` line, an indented continuation line. The verification runs to the next item or heading. Both must be present.
-- Every requirement is tested inside the project under test. The `Verification:` line names one or more tests as backticked identifiers starting with `test` or `Test`, and one test file as a backticked path with its suffix, relative to the repository root. The project must declare a test command for that file type in `[tool.evidence-based-review]` in `pyproject.toml`; only `.py` has a default (pytest). It contains no other backticked span with a dot in it, because the review reads every such span as a test file. A command, `diff`, manual check, or check outside the repository is not a verification.
+- Every requirement is verified inside the project under test. Name tests for lasting behavior, and a command for a one-time change, such as a deletion, a rename or a move.
+  - Tests: the `Verification:` line names one or more tests as backticked identifiers starting with `test` or `Test`, and one test file as a backticked path with its suffix, relative to the repository root. The project must declare a test command for that file type in `[tool.evidence-based-review]` in `pyproject.toml`; only `.py` has a default (pytest). It contains no other backticked span with a dot in it, because the review reads every such span as a test file.
+  - Command: the `Verification:` line is one command, written command `<shell text>`, with no other backticked span. The review runs it with `sh -c` at the review's baseline and at the commit, each in its own clean worktree. It passes only when it fails at the baseline and passes at the commit, so it must fail before the change and pass after it. It reads only the worktree and prints what it checks; quiet flags such as `grep -q` are not used. A reviewer explains what the difference between the two runs proves. A command checks the requirement once, during the review, so it is never used for behavior that must keep holding.
+  - A `diff`, a manual check, or a check outside the repository is not a verification.
 - In a `.py` file, a named test is one plain module-level function, run once. Never parametrize it, put it in a test class, give it a parametrized fixture, or skip or xfail it. The review runs the test file and matches the name to exactly one JUnit test case by exact name. `name[param]` never matches. `Class::name` is not read as a test name, and one method name in two classes matches several cases, which stops the review. A skipped test also stops it. Kyle's rule for his projects: no parametrized tests and no test classes at all.
 - A real run is acceptance evidence for a task, not a requirement. Put its expected result in the task's acceptance criteria.
 - An install is a release step, not a requirement.
@@ -345,7 +348,7 @@ Before proceeding to implementation, confirm:
 - [ ] The spec covers all six core areas
 - [ ] The human has reviewed and approved the spec
 - [ ] Success criteria are specific and testable
-- [ ] Every requirement has a stable ID and a `Verification:` line under `## Requirements` that names its tests and one test file in this project, of a type the project has a test command for
+- [ ] Every requirement has a stable ID and a `Verification:` line under `## Requirements` that names its tests and one test file in this project, of a type the project has a test command for, or, for a one-time change, one command
 - [ ] The project's pre-commit hook is the link to `scripts/pre-commit`, and the spec and task file were committed through it
 - [ ] The Specify hook output is pasted and ends with `READY`
 - [ ] The Plan and Tasks hook output is pasted and ends with `READY`
