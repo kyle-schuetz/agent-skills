@@ -25,11 +25,19 @@ Spec-driven development has four phases, preceded by a scope check (Phase 0) tha
 
 ```
 SPECIFY ──→ PLAN ──→ TASKS ──→ IMPLEMENT
-   │          │        │          │
-   ▼          ▼        ▼          ▼
- Human      Human    Human      Human
- reviews    reviews  reviews    reviews
+   │          │        │
+   ▼          ▼        ▼
+ Human      Human    Human
+ reviews    reviews  reviews
 ```
+
+After the human approves the plan and the task file, the agent implements every phase to the end without asking for review between phases.
+
+The agent still stops and asks the human for:
+- any change to what the approved spec, plan, or task file says, such as a requirement, its scope, or a task added or removed. Recording starting commits and ticking checkboxes are not changes.
+- architecture or design decisions the spec and plan do not settle, such as a new module, a new dependency, or a change to an interface or data model.
+- anything the spec lists under 'Ask first'.
+- actions that need the human's approval by rule: vendor downloads, writes to production data, container actions, and merges into the `main` branch.
 
 ### Review Readiness Hooks
 
@@ -79,7 +87,7 @@ Add `--worktree <path>` when running from another directory. `review` takes the 
 
 What each stage checks:
 - `spec`: at `HEAD` of a clean checkout, the committed spec parses as review setup parses it, and every `Verification:` line names its tests and one test file the project has a test command for, or one command. It prints the requirement count and IDs.
-- `plan`: at `HEAD` of a clean checkout, every task file and its spec are committed and parse; every phase has tasks; every task lists requirements that exist in the spec, with readable `Verification:` lines; every recorded starting commit is a bare 40-character commit ID in `HEAD`'s history, in task order. A task that has not started may have an empty starting commit.
+- `plan`: at `HEAD` of a clean checkout, every task file and its spec are committed and parse; every phase has tasks; every task lists requirements that exist in the spec, with readable `Verification:` lines; every recorded starting commit is a bare 40-character commit ID in `HEAD`'s history, and the first task's starting commit comes before every other task's starting commit. A task that has not started may have an empty starting commit.
 - `staged`: what the pre-commit hook runs on the commit being made.
 - `review`: the review tool's setup (`scope.review_scope`) with no exceptions, including a starting commit for every task in scope. Then each requirement's check, run by the review tool's own code as the review runs it: in a temporary worktree at the candidate, the project's `setup` commands, the `build` and `test` commands declared for the test file's type in `[tool.evidence-based-review]` (pytest for `.py` when none is declared), and the report matched to each named test. A named test passes only when it is in the report exactly once and passed; missing, failed, skipped, or matched more than once fails. The project's `teardown` commands run at the end. Then `git grep` at the candidate finds no `parametrize`, `^class Test`, skip, or xfail in any tracked Python test file. This also catches what a commit made with `--no-verify` let in. Then the checkout is still clean.
 
@@ -160,7 +168,7 @@ Don't silently fill in ambiguous requirements. The spec's entire purpose is to s
 5. **Testing Strategy** — What framework, where tests live, coverage expectations, which test levels for which concerns.
 
 6. **Boundaries** — Three-tier system:
-   - **Always do:** Run tests before commits, follow naming conventions, validate inputs
+   - **Always do:** Run the tests for the code that changed before commits, follow naming conventions, validate inputs
    - **Ask first:** Database schema changes, adding dependencies, changing CI config
    - **Never do:** Commit secrets, edit vendor directories, remove failing tests without approval
 
@@ -297,7 +305,9 @@ The task file rules are in `planning-and-task-breakdown` (Step 4). The one that 
 
 ### Phase 4: Implement
 
-Execute tasks one at a time following `skills/incremental-implementation/SKILL.md` (`incremental-implementation`) and `skills/test-driven-development/SKILL.md` (`test-driven-development`). Use `skills/context-engineering/SKILL.md` (`context-engineering`) to load the right spec sections and source files at each step rather than flooding the agent with the entire spec.
+The agent running this workflow is the coordinator. It does not implement tasks itself. It gives each task to a subagent that works in its own worktree and branch and follows `skills/incremental-implementation/SKILL.md` (`incremental-implementation`) and `skills/test-driven-development/SKILL.md` (`test-driven-development`). Tasks that do not depend on each other run in parallel. When a subagent finishes, the coordinator reviews its diff against the spec text, runs the per-task hook, and merges the branch. Use `skills/context-engineering/SKILL.md` (`context-engineering`) to give each subagent only the spec sections and source files its task needs.
+
+Tasks, checkpoints, and merges of a task branch into the work branch run only the tests for the code that changed. The full test suite runs once, as the final quality gate before the work branch merges into the `main` branch.
 
 Write each named verification test as one plain function whose single run proves its requirement (see Requirements format).
 

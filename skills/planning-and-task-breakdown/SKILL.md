@@ -117,7 +117,7 @@ Review setup reads these fields from the task file as committed, so follow them 
 - Any other heading inside a task, such as `#### Notes`, ends the task. Put `**Requirements:**` and `**Starting commit:**` directly under the task heading, before any other heading.
 - Phase and task numbers are unique within the file. Every phase has at least one task.
 - `**Requirements:**` lists the IDs of the spec requirements the task covers, separated by commas, with no other text. Every task lists at least one, and each ID exists in the spec.
-- `**Starting commit:**` is the full ID of `HEAD` when the task starts: the bare 40-character ID, with no backticks, short ID, branch name, or other text. It is recorded in the task file, and that edit is committed with the task's work. Recording it does not change what was approved, like ticking a checkbox. Starting commits follow task order.
+- `**Starting commit:**` is the full ID of `HEAD` when the task starts: the bare 40-character ID, with no backticks, short ID, branch name, or other text. It is recorded in the task file, and that edit is committed with the task's work. Recording it does not change what was approved, like ticking a checkbox. Tasks may run in parallel on separate branches. Every task's starting commit must be in the history of the commit under review, and the first task's starting commit must come before every other task's starting commit.
 - Each of these two lines appears once per task.
 - Work with one spec uses one task file with one or more phases. Work split into one spec per module uses one task file per module, each with its own phases.
 - Review setup reads the task file and spec as committed, from a checkout with no uncommitted or untracked files.
@@ -143,11 +143,12 @@ Add explicit checkpoints to the task list target:
 
 ```markdown
 ## Checkpoint: After Tasks 1-3
-- [ ] All tests pass
+- [ ] Tests for the code these tasks changed pass
 - [ ] Application builds without errors
 - [ ] Core user flow works end-to-end
-- [ ] Review with human before proceeding
 ```
+
+The agent checks each checkpoint itself and goes on to the next phase without asking the human.
 
 ## Task Sizing Guidelines
 
