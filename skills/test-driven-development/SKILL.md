@@ -31,7 +31,7 @@ The TDD cycle is universal; the commands are not. Before writing the first test,
 - **Existing conventions** — where tests live, how files are named, what patterns neighboring tests follow
 - **Documented commands** — README, CONTRIBUTING, and CI workflows show the commands that actually gate merges
 
-Run the repository's focused-test command during the loop and its full-suite command before completion. Never assume a default like `npm test` — a Gradle, Cargo, or pytest project has its own equivalent.
+Run the repository's focused-test command for the code that changed. The full suite runs once, after the full-work evidence-based review and never before it, as the final quality gate before the work branch merges into `main` (see `spec-driven-development`). Never assume a default like `npm test` — a Gradle, Cargo, or pytest project has its own equivalent.
 
 The examples below use TypeScript for illustration; the workflow is identical in any language once you've discovered the project's own tooling.
 
@@ -113,7 +113,7 @@ Bug report arrives
   Test PASSES (proving the fix works)
        │
        ▼
-  Run full test suite (no regressions)
+  Run the tests for the code that changed (no regressions)
 ```
 
 **Example:**
@@ -389,7 +389,7 @@ For JavaScript/TypeScript testing patterns illustrating these principles — Jes
 After completing any implementation:
 
 - [ ] Every new behavior has a corresponding test
-- [ ] The full suite passes, run with the repository's own test command (`npm test`, `./gradlew test`, `pytest`, `go test ./...`, ...)
+- [ ] The tests for the code that changed pass, run with the repository's own focused-test command
 - [ ] Bug fixes include a reproduction test that failed before the fix
 - [ ] Test names describe the behavior being verified
 - [ ] No tests were skipped or disabled

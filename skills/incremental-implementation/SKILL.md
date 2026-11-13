@@ -36,7 +36,7 @@ Build in thin vertical slices — implement one piece, test it, verify it, then 
 For each slice:
 
 1. **Implement** the smallest complete piece of functionality
-2. **Test** — run the test suite (or write a test if none exists)
+2. **Test** — run the tests for the code that changed (or write a test if none exists)
 3. **Verify** — confirm the slice works as expected (tests pass, build succeeds, manual check)
 4. **Commit** -- save your progress with a descriptive message (see `git-workflow-and-versioning` for atomic commit guidance)
 5. **Move to the next slice** — carry forward, don't restart
@@ -201,7 +201,7 @@ Be explicit about what's in scope and what's NOT in scope for each increment.
 After each increment, verify with the repository's own commands (see the test-driven-development skill's Discover the Stack First section):
 
 - [ ] The change does one thing and does it completely
-- [ ] All existing tests still pass (the repository's test command: `npm test`, `./gradlew test`, `pytest`, ...)
+- [ ] The tests for the code that changed pass, run with the repository's focused-test command
 - [ ] The build succeeds (the repository's build command)
 - [ ] Type checking passes, where the stack has one (`npx tsc --noEmit`, `mypy`, ...)
 - [ ] Linting passes (the repository's lint command)
@@ -239,7 +239,7 @@ After each increment, verify with the repository's own commands (see the test-dr
 After completing all increments for a task:
 
 - [ ] Each increment was individually tested and committed
-- [ ] The full test suite passes
+- [ ] The tests for the code the task changed pass
 - [ ] The build is clean
 - [ ] The feature works end-to-end as specified
 - [ ] No uncommitted changes remain
