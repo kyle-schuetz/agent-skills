@@ -307,7 +307,7 @@ The task file rules are in `planning-and-task-breakdown` (Step 4). The one that 
 
 The agent running this workflow is the coordinator. It does not implement tasks itself. It gives each task to a subagent that works in its own worktree and branch and follows `skills/incremental-implementation/SKILL.md` (`incremental-implementation`) and `skills/test-driven-development/SKILL.md` (`test-driven-development`). Tasks that do not depend on each other run in parallel. When a subagent finishes, the coordinator reviews its diff against the spec text, runs the per-task hook, and merges the branch. Use `skills/context-engineering/SKILL.md` (`context-engineering`) to give each subagent only the spec sections and source files its task needs.
 
-Tasks, checkpoints, and merges of a task branch into the work branch run only the tests for the code that changed. The full test suite runs once, after the evidence-based review and never before it, as the final quality gate before the work branch merges into the `main` branch. Finishing implementation does not start it.
+Tasks, checkpoints, and merges of a task branch into the work branch run only the tests for the code that changed. The full test suite runs once, after the full-work evidence-based review and never before it, as the final quality gate before the work branch merges into the `main` branch. Finishing implementation does not start it.
 
 Write each named verification test as one plain function whose single run proves its requirement (see Requirements format).
 
