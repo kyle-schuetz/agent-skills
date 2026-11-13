@@ -159,8 +159,8 @@ After fixing, verify the complete scenario with the repository's own commands (n
 # Run the specific test
 npm test -- --grep "specific test"
 
-# Run the full test suite (check for regressions)
-npm test
+# Run the tests for the code that changed (check for regressions)
+npm test -- <test files for the changed code>
 
 # Build the project (check for type/compilation errors)
 npm run build
@@ -295,6 +295,6 @@ After fixing a bug:
 - [ ] Root cause is identified and documented
 - [ ] Fix addresses the root cause, not just symptoms
 - [ ] A regression test exists that fails without the fix
-- [ ] All existing tests pass
+- [ ] The tests for the code that changed pass
 - [ ] Build succeeds
 - [ ] The original bug scenario is verified end-to-end
