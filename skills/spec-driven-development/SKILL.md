@@ -46,11 +46,13 @@ The evidence-based review tool reads the spec, the task files, and the test repo
 **Commit gate.** A phase that creates the spec or the task file ends only when that file is committed. The project's Git pre-commit hook (`scripts/pre-commit`) runs `review-readiness.py staged` on every commit and refuses the commit when:
 - a staged spec does not parse as review setup parses it, or a `Verification:` line cannot be read. A spec is any `SPEC*.md` file, or any file a task file links;
 - a staged task file, or a task file that links a staged spec, breaks a review setup rule (the `plan` rules below), including after a spec change removes a requirement a task lists. A task file is any `TASKS*.md` file, any `tasks/todo.md`, or any file with a `**Spec:**` line and a `## Phase` heading;
-- a staged Python test file (`test_*.py`, `*_test.py`, `conftest.py`, or any `.py` file under a `tests/` or `test/` folder) adds a `parametrize`, a `class Test`, a skip, or an xfail.
+- one of those task files breaks the task template of `planning-and-task-breakdown`: a task lists more than 5 files under `**Files likely touched:**` (each backticked name counts, and a bullet with none counts as one), or a phase other than the last is not followed by a `## Checkpoint:` heading before the next `## Phase` heading;
+- a staged plan breaks the plan template of `planning-and-task-breakdown`: the `## Overview`, `## Architecture Decisions`, `## Task List`, `## Risks and Mitigations` and `## Open Questions` headings are missing or out of order, Overview, Architecture Decisions or Open Questions is empty, Task List does not link the task file, or Risks and Mitigations has no `| Risk | Impact | Mitigation |` table. Other headings may appear anywhere. A plan is any `PLAN*.md` file or any `tasks/plan.md`;
+- a staged Python test file (`test_*.py`, `*_test.py`, `conftest.py`, or any `.py` file under a `tests/` or `test/` folder) adds a `parametrize`, a `class Test`, a skip, an xfail, or a line that reads code or document text: `inspect.getsource`, `hasattr(`, a module's `__file__` read, or a `.md` path. A test checks behavior, not that a name or text is present or missing.
 
 Files the commit does not touch are not checked. A refused commit means the phase has not ended. Fix the file and commit again.
 
-Name every spec `SPEC*.md` and every task file `TASKS*.md` or `tasks/todo.md`, so the hook checks it.
+Name every spec `SPEC*.md` and every task file `TASKS*.md` or `tasks/todo.md`, so the hook checks it. Name the plan after its task file: `TASKS-<name>.md` has `PLAN-<name>.md` in the same folder, and `tasks/todo.md` has `tasks/plan.md`.
 
 Before Phase 1 writes anything, check that the hook is installed:
 
@@ -87,9 +89,9 @@ Add `--worktree <path>` when running from another directory. `review` takes the 
 
 What each stage checks:
 - `spec`: at `HEAD` of a clean checkout, the committed spec parses as review setup parses it, and every `Verification:` line names its tests and one test file the project has a test command for, or one command. It prints the requirement count and IDs.
-- `plan`: at `HEAD` of a clean checkout, every task file and its spec are committed and parse; every phase has tasks; every task lists requirements that exist in the spec, with readable `Verification:` lines; every recorded starting commit is a bare 40-character commit ID in `HEAD`'s history, and the first task's starting commit comes before every other task's starting commit. A task that has not started may have an empty starting commit.
+- `plan`: at `HEAD` of a clean checkout, every task file and its spec are committed and parse; every phase has tasks; every task lists requirements that exist in the spec, with readable `Verification:` lines; every recorded starting commit is a bare 40-character commit ID in `HEAD`'s history, and the first task's starting commit comes before every other task's starting commit. A task that has not started may have an empty starting commit. Then each task file follows the task template, and the plan named after it exists and follows the plan template, by the commit gate's rules above.
 - `staged`: what the pre-commit hook runs on the commit being made.
-- `review`: the review tool's setup (`scope.review_scope`) with no exceptions, including a starting commit for every task in scope. Then each requirement's check, run by the review tool's own code as the review runs it: in a temporary worktree at the candidate, the project's `setup` commands, the `build` and `test` commands declared for the test file's type in `[tool.evidence-based-review]` (pytest for `.py` when none is declared), and the report matched to each named test. A named test passes only when it is in the report exactly once and passed; missing, failed, skipped, or matched more than once fails. The project's `teardown` commands run at the end. Then `git grep` at the candidate finds no `parametrize`, `^class Test`, skip, or xfail in any tracked Python test file. This also catches what a commit made with `--no-verify` let in. Then the checkout is still clean.
+- `review`: the review tool's setup (`scope.review_scope`) with no exceptions, including a starting commit for every task in scope. Then each requirement's check, run by the review tool's own code as the review runs it: in a temporary worktree at the candidate, the project's `setup` commands, the `build` and `test` commands declared for the test file's type in `[tool.evidence-based-review]` (pytest for `.py` when none is declared), and the report matched to each named test. A named test passes only when it is in the report exactly once and passed; missing, failed, skipped, or matched more than once fails. The project's `teardown` commands run at the end. Then `git grep` at the candidate finds no `parametrize`, `^class Test`, skip, xfail, or read of code or document text (the commit gate's patterns) in any tracked Python test file. This also catches what a commit made with `--no-verify` let in. Then the checkout is still clean.
 
 ### Phase 0: Scope Check
 
@@ -228,6 +230,7 @@ Don't silently fill in ambiguous requirements. The spec's entire purpose is to s
   - Command: the `Verification:` line is one command, written command `<shell text>`, with no other backticked span. The review runs it with `sh -c` at the review's baseline and at the commit, each in its own clean worktree. It passes only when it fails at the baseline and passes at the commit, so it must fail before the change and pass after it. It reads only the worktree and prints what it checks; quiet flags such as `grep -q` are not used. A reviewer explains what the difference between the two runs proves. A command checks the requirement once, during the review, so it is never used for behavior that must keep holding.
   - A `diff`, a manual check, or a check outside the repository is not a verification.
 - In a `.py` file, a named test is one plain module-level function, run once. Never parametrize it, put it in a test class, give it a parametrized fixture, or skip or xfail it. The review runs the test file and matches the name to exactly one JUnit test case by exact name. `name[param]` never matches. `Class::name` is not read as a test name, and one method name in two classes matches several cases, which stops the review. A skipped test also stops it. Kyle's rule for his projects: no parametrized tests and no test classes at all.
+- A named test checks behavior. It never checks that a name or text is present or missing by reading code or documents (`inspect.getsource`, `hasattr`, a module's `__file__`, a `.md` file). A one-time removal or rename is verified with a command.
 - A real run is acceptance evidence for a task, not a requirement. Put its expected result in the task's acceptance criteria.
 - An install is a release step, not a requirement.
 - IDs are unique within the spec and are never renumbered.
@@ -274,7 +277,7 @@ Break the plan into discrete, implementable tasks:
 - Each task has explicit acceptance criteria
 - Each task includes a verification step (test, build, manual check)
 - Tasks are ordered by dependency, not by perceived importance
-- No task should require changing more than ~5 files
+- No task lists more than 5 files likely touched
 
 > Follow `planning-and-task-breakdown` for the full task-sizing and dependency-ordering mechanics; it is the canonical source. The template below is a lightweight inline form; if they ever diverge, `planning-and-task-breakdown` takes precedence.
 

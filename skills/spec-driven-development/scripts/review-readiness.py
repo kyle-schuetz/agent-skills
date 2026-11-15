@@ -11,19 +11,23 @@ Stages:
         Parse the spec as committed at HEAD of a clean worktree, as review setup does.
     plan --task-file <path>... [--worktree <path>]
         Check every task file and its spec at HEAD of a clean worktree. A task that has not
-        started may have an empty starting commit; every other rule applies.
+        started may have an empty starting commit; every other rule applies. Then each task file and
+        the plan named after it (TASKS-x.md has PLAN-x.md, tasks/todo.md has tasks/plan.md) follow the
+        planning-and-task-breakdown templates.
     review <level> [<target>] --candidate <ref> --task-file <path>... [--worktree <path>]
         The review command's own setup, then each requirement's check exactly as the review runs it
         (project setup, the build and test command declared for the test file's type, the report
         matched to each named test), in a temporary worktree at the candidate. Then no tracked Python
-        test file may hold a parametrized test, test class, skip, or xfail. Same arguments as
+        test file may hold a parametrized test, test class, skip, xfail, or read of code or document
+        text (inspect.getsource, hasattr, a module's __file__ read, a .md path). Same arguments as
         `evidence-based-review review`.
 
     staged
         The Git pre-commit hook (scripts/pre-commit). Checks the commit being made: each staged spec,
-        each staged task file and each task file that links a staged spec, with the `plan` rules, and
-        every added line of a staged Python test file for parametrize, test classes, skips, and xfails. Files
-        that the commit does not touch are not checked.
+        each staged task file and each task file that links a staged spec, with the `plan` rules, each
+        staged plan (PLAN*.md, tasks/plan.md) against the plan template, and every added line of a staged
+        Python test file for parametrize, test classes, skips, xfails, and reads of code or document text.
+        Files that the commit does not touch are not checked.
 
 Prints one line per check, then READY or NOT READY. Exit code 0 only when READY.
 """
@@ -32,6 +36,7 @@ from __future__ import annotations
 
 import argparse
 from fnmatch import fnmatchcase
+from itertools import pairwise
 import os
 import posixpath
 import re
@@ -43,13 +48,18 @@ from pathlib import Path, PurePosixPath
 
 from evidence_based_review.checks import read_check, run_check
 from evidence_based_review.records import Failure, RecordStore
-from evidence_based_review.scope import (_PHASE, _SPEC_LINK, _baseline, _check_verifications, _git, _lines,
+from evidence_based_review.scope import (_PHASE, _SPEC_LINK, _TASK, _baseline, _check_verifications, _git, _lines,
                                          _requirements,
                                          _tasks_in_scope, check_source, parse_spec, read_work, resolve_commit,
                                          review_scope)
 from evidence_based_review.agents import build_directory, project_commands, run_build, run_commands, run_setup
 
-FORBIDDEN = r"parametrize|^class Test|pytest\.mark\.(skip|skipif|xfail)|pytest\.(skip|xfail|importorskip)\("
+FORBIDDEN = (r"parametrize|^class Test|pytest\.mark\.(skip|skipif|xfail)|pytest\.(skip|xfail|importorskip)\("
+             r"|inspect\.getsource|hasattr\(|__file__\)\.read_text|\.md[\"']")
+PLAN_SECTIONS = ("Overview", "Architecture Decisions", "Task List", "Risks and Mitigations", "Open Questions")
+RISK_TABLE = re.compile(r"\|\s*Risk\s*\|\s*Impact\s*\|\s*Mitigation\s*\|")
+TASK_FILE_LINK = re.compile(r"\]\(([^)#\s]*/)?(TASKS[^)#\s/]*\.md|todo\.md)(#[^)\s]*)?\)")
+MAX_FILES = 5
 TEST_FILES = [":(glob)**/test_*.py", ":(glob)**/*_test.py", ":(glob)**/conftest.py", ":(glob)**/tests/**/*.py",
               ":(glob)**/test/**/*.py"]
 failures: list[str] = []
@@ -114,8 +124,82 @@ def check_spec(worktree: Path, commit: str, path: str, text: str) -> None:
 def plan_stage(args) -> None:
     worktree = Path(args.worktree).resolve()
     commit = report("clean checkout", lambda: clean_head(worktree))
-    if commit is not None:
-        report("task files and specs at HEAD", lambda: check_work(worktree, commit, args.task_files))
+    if commit is None:
+        return
+    report("task files and specs at HEAD", lambda: check_work(worktree, commit, args.task_files))
+    for path in map(posixpath.normpath, args.task_files):
+        plan = plan_of(path)
+        report(f"task file {path} follows the template",
+               lambda path=path: check_task_template(path, _git(worktree, "show", f"{commit}:{path}")))
+        report(f"plan {plan} follows the template",
+               lambda plan=plan: check_plan_template(plan, _git(worktree, "show", f"{commit}:{plan}")))
+
+
+def plan_of(task_file: str) -> str:
+    """The plan file named after a task file: TASKS-x.md has PLAN-x.md beside it, tasks/todo.md has tasks/plan.md."""
+    folder, name = posixpath.split(task_file)
+    return posixpath.join(folder, "plan.md" if name == "todo.md" else "PLAN" + name.removeprefix("TASKS"))
+
+
+def check_plan_template(path: str, text: str):
+    """The plan template of planning-and-task-breakdown: its five sections in order, each filled as the template
+    shows. Other sections may appear anywhere."""
+    headings = [line[3:].strip() for line in _lines(text) if line.startswith("## ")]
+    remaining = iter(headings)
+    if not all(section in remaining for section in PLAN_SECTIONS):
+        raise Failure(f"the ## headings must include, in this order: {', '.join(PLAN_SECTIONS)}."
+                      f" Found: {', '.join(headings) or 'none'}")
+    sections: dict[str, list[str]] = {}
+    current = None
+    for line in _lines(text):
+        if line.startswith("## "):
+            current = line[3:].strip()
+            sections.setdefault(current, [])
+        elif line.startswith("# "):
+            current = None
+        elif current is not None and line.strip():
+            sections[current].append(line)
+    problems = [f"## {section} is empty" for section in ("Overview", "Architecture Decisions", "Open Questions")
+                if not sections[section]]
+    if not any(TASK_FILE_LINK.search(line) for line in sections["Task List"]):
+        problems.append("## Task List does not link the task file")
+    if not any(RISK_TABLE.fullmatch(line.strip()) for line in sections["Risks and Mitigations"]):
+        problems.append("## Risks and Mitigations has no | Risk | Impact | Mitigation | table")
+    if problems:
+        raise Failure("\n".join(problems))
+    return None, "the template's five sections, in order and filled"
+
+
+def check_task_template(path: str, text: str):
+    """The task template of planning-and-task-breakdown: each task lists at most MAX_FILES files likely touched, and a
+    ## Checkpoint: heading follows every phase but the last."""
+    files: dict[str, int] = {}
+    headings: list[str] = []
+    task, listing = None, False
+    for line in _lines(text):
+        if line.startswith("#"):
+            match = _TASK.match(line)
+            task, listing = (f"Task {int(match.group(1))}" if match else None), False
+            if line.startswith("## "):
+                headings.append(line.strip())
+            continue
+        if line.startswith("**Files likely touched:**"):
+            listing = task is not None
+            line = line.removeprefix("**Files likely touched:**")
+        elif listing and not line.lstrip().startswith(("- ", "* ")):
+            listing = not line.strip()
+            continue
+        if listing and line.strip():
+            files[task] = files.get(task, 0) + (len(re.findall(r"`[^`]+`", line)) or 1)
+    problems = [f"{task} lists {count} files likely touched; at most {MAX_FILES}"
+                for task, count in files.items() if count > MAX_FILES]
+    phases = [i for i, heading in enumerate(headings) if _PHASE.match(heading)]
+    problems += [f"{headings[start]!r} is not followed by a ## Checkpoint: heading before the next phase"
+                 for start, end in pairwise(phases)
+                 if not any(heading.startswith("## Checkpoint:") for heading in headings[start + 1:end])]
+    if problems:
+        raise Failure("\n".join(problems))
+    return None, f"at most {MAX_FILES} files per task, a checkpoint after every phase but the last"
 
 
 def check_work(worktree: Path, commit: str, task_files: list[str]):
@@ -150,7 +234,7 @@ def staged_stage(args) -> None:
     check_documents(worktree, commit, staged)
     added = [line for line in _git(worktree, "diff", "--cached", "-U0", "--", *TEST_FILES).splitlines()
              if line.startswith("+") and not line.startswith("+++")]
-    report("no parametrize, test classes, skips, or xfails added",
+    report("no parametrize, test classes, skips, xfails, or code or document text reads added",
            lambda: forbidden_lines([line[1:] for line in added]))
 
 
@@ -177,12 +261,18 @@ def check_documents(worktree: Path, commit: str, staged: list[str]) -> None:
     # One check per task file: a commit can touch task files of unrelated work; plan and review check order across one work's files.
     for path in task_files:
         report(f"task file {path} in this commit", lambda path=path: check_work(worktree, commit, [path]))
+        report(f"task file {path} follows the template",
+               lambda path=path: check_task_template(path, _git(worktree, "show", f"{commit}:{path}")))
+    for path in staged:
+        if fnmatchcase(posixpath.basename(path), "PLAN*.md") or path == "tasks/plan.md" or path.endswith("/tasks/plan.md"):
+            report(f"plan {path} follows the template",
+                   lambda path=path: check_plan_template(path, _git(worktree, "show", f"{commit}:{path}")))
 
 
 def forbidden_lines(lines: list[str]):
     found = [line for line in lines if re.search(FORBIDDEN, line)]
     if found:
-        raise Failure(f"{len(found)} added line(s); every test is one plain function, run once:\n" + "\n".join(found))
+        raise Failure(f"{len(found)} added line(s); every test is one plain function, run once, that checks behavior, not code or document text:\n" + "\n".join(found))
     return None, f"{len(lines)} added Python test lines checked"
 
 
@@ -197,7 +287,7 @@ def review_stage(args) -> None:
     if definition is None:
         return
     run_named_checks(worktree, definition)
-    report("no parametrize, test classes, skips, or xfails in any Python test file",
+    report("no parametrize, test classes, skips, xfails, or code or document text reads in any Python test file",
            lambda: forbidden(worktree, definition["candidate"]))
 
     def clean():
@@ -263,7 +353,7 @@ def forbidden(worktree: Path, commit: str):
     if run.returncode != 0:
         raise Failure(f"git grep failed: {run.stderr.strip()}")
     lines = run.stdout.splitlines()
-    raise Failure(f"{len(lines)} line(s) found; every test is one plain function, run once:\n"
+    raise Failure(f"{len(lines)} line(s) found; every test is one plain function, run once, that checks behavior, not code or document text:\n"
                   + "\n".join(line.removeprefix(f"{commit}:") for line in lines))
 
 

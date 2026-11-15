@@ -122,7 +122,7 @@ Review setup reads these fields from the task file as committed, so follow them 
 - Work with one spec uses one task file with one or more phases. Work split into one spec per module uses one task file per module, each with its own phases.
 - Review setup reads the task file and spec as committed, from a checkout with no uncommitted or untracked files.
 
-**Hook.** Commit the task file with its spec. The project's pre-commit hook refuses the commit when the task file or spec breaks any rule above (see `spec-driven-development`, Review Readiness Hooks, for installing it). Never commit with `--no-verify`. Then, from a clean checkout, run this and paste its full output. Never ask for approval of an uncommitted task file. Do not ask for approval or call the tasks ready until it ends with `READY`, and ask for approval at the commit it names:
+**Hook.** Commit the task file with its spec. The project's pre-commit hook refuses the commit when the task file or spec breaks any rule above, or when the task file or plan breaks a template rule in Step 5, Task Sizing Guidelines, or Plan Document Template (see `spec-driven-development`, Review Readiness Hooks, for installing it). Never commit with `--no-verify`. Then, from a clean checkout, run this and paste its full output. Never ask for approval of an uncommitted task file. Do not ask for approval or call the tasks ready until it ends with `READY`, and ask for approval at the commit it names:
 
 ```
 uv run --project /home/kyleschuetz/evidence-based-review python /home/kyleschuetz/.agents/skills/spec-driven-development/scripts/review-readiness.py plan --task-file <task file>...
@@ -148,6 +148,8 @@ Add explicit checkpoints to the task list target:
 - [ ] Core user flow works end-to-end
 ```
 
+A `## Checkpoint:` heading follows every phase except the last, before the next `## Phase` heading. The hook refuses a task file that misses one.
+
 The agent checks each checkpoint itself and goes on to the next phase without asking the human.
 
 ## Task Sizing Guidelines
@@ -162,6 +164,8 @@ The agent checks each checkpoint itself and goes on to the next phase without as
 
 If a task is L or larger, it should be broken into smaller tasks. An agent performs best on S and M tasks.
 
+A task lists at most 5 files under `**Files likely touched:**`. Each backticked name counts as one file, and a bullet with none counts as one. The hook refuses a task with more.
+
 **When to break a task down further:**
 - It would take more than one focused session (roughly 2+ hours of agent work)
 - You cannot describe the acceptance criteria in 3 or fewer bullet points
@@ -170,7 +174,7 @@ If a task is L or larger, it should be broken into smaller tasks. An agent perfo
 
 ## Output Files
 
-- **Plan document:** Save the implementation plan to `tasks/plan.md`. This is always a markdown file — design decisions, risks, and open questions don't map cleanly onto individual tracker issues.
+- **Plan document:** Save the implementation plan to `tasks/plan.md`, or to `PLAN-<name>.md` beside a task file named `TASKS-<name>.md`. This is always a markdown file — design decisions, risks, and open questions don't map cleanly onto individual tracker issues.
 - **Task list:** Record each task in the **task list target** (defined below).
 
 Create the `tasks/` directory if it does not exist.
@@ -190,6 +194,8 @@ The task list target is where tasks and checkpoints are recorded. It is defined 
 - **Trackers mirror the file.** If the project's agent rules (`CLAUDE.md`, `AGENTS.md`, etc.) or the user want issues in a tracker (e.g. GitHub Issues, Jira, Linear, `bd`/beads), create them as copies that link back to their task in the file. The committed task file stays the source. A review reads the task file as it was at the reviewed commit, and a tracker item has no such version.
 
 ## Plan Document Template
+
+The hook refuses a plan that does not have these five `##` headings in this order, that leaves Overview, Architecture Decisions or Open Questions empty, whose Task List does not link the task file, or whose Risks and Mitigations has no `| Risk | Impact | Mitigation |` table. Other sections may be added anywhere.
 
 ```markdown
 # Implementation Plan: [Feature/Project Name]
@@ -261,8 +267,8 @@ Before starting implementation, confirm:
 - [ ] Every task lists the spec requirement IDs it covers, and tasks sit under `## Phase` headings
 - [ ] The `plan` hook output is pasted and ends with `READY`
 - [ ] No pre-existing incomplete plan was overwritten without explicit user confirmation
-- [ ] No task touches more than ~5 files
-- [ ] Checkpoints exist between major phases
+- [ ] No task lists more than 5 files likely touched
+- [ ] A checkpoint follows every phase except the last
 - [ ] The human has reviewed and approved the plan
 
 ## See Also
