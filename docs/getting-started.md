@@ -170,7 +170,7 @@ This portability gap is tracked in
 
 ## Spec and task artifacts
 
-The `/spec` and `/plan` commands create working artifacts (`SPEC.md`, `tasks/plan.md`, `tasks/todo.md`). Treat them as **living documents** while the work is in progress:
+The `/spec` and `/plan` commands create working artifacts (`docs/specs/[work]/SPEC-[name].md`, `docs/specs/[work]/PLAN-[name].md`, `docs/specs/[work]/TASKS-[name].md`). Treat them as **living documents** while the work is in progress:
 
 - Keep them in version control during development so the human and the agent have a shared source of truth.
 - Update them when scope or decisions change.
@@ -180,8 +180,8 @@ The `/spec` and `/plan` commands create working artifacts (`SPEC.md`, `tasks/pla
 
 The same artifacts are the handoff between sessions. For a small task, run the whole lifecycle in one session. For anything non-trivial, a fresh session per phase (spec → plan → build → review) keeps context focused — what carries the work forward is the approved files, not the conversation:
 
-- the spec — `SPEC.md`, or wherever your spec actually lives
-- `tasks/plan.md` and `tasks/todo.md` — or the external tracker the plan identifies, if you use one
+- the spec — `docs/specs/[work]/SPEC-[name].md`
+- `docs/specs/[work]/PLAN-[name].md` and `docs/specs/[work]/TASKS-[name].md` — or the external tracker the plan identifies, if you use one
 
 **Before switching**, make sure those files reflect the decisions that still apply, the scope you approved, the questions still open, the next task, and the current verification state (which tests ran, against what).
 
@@ -195,9 +195,9 @@ A shell-level "Ralph loop" is harness behavior, not a separate skill workflow. I
 
 This doesn't need the `/spec` and `/plan` wrappers — plain requests work in any agent, including a `npx skills add` install that only has the skills:
 
-> Read SPEC.md, then break it into small verifiable tasks with acceptance criteria and dependency order. Save them to tasks/plan.md and tasks/todo.md. No product code yet — show me the plan first.
+> Read docs/specs/[work]/SPEC-[name].md, then break it into small verifiable tasks with acceptance criteria and dependency order. Save them to docs/specs/[work]/PLAN-[name].md and docs/specs/[work]/TASKS-[name].md. No product code yet — show me the plan first.
 
-> Read SPEC.md, tasks/plan.md and tasks/todo.md, then check where things actually stand — `git status`, plus re-running whatever checks the recorded verification state no longer covers. Tell me the next unchecked task and anything still open, then stop: I'll confirm the scope before you start it. If the plan looks incomplete, say what's missing rather than rewriting it.
+> Read docs/specs/[work]/SPEC-[name].md, docs/specs/[work]/PLAN-[name].md and docs/specs/[work]/TASKS-[name].md, then check where things actually stand — `git status`, plus re-running whatever checks the recorded verification state no longer covers. Tell me the next unchecked task and anything still open, then stop: I'll confirm the scope before you start it. If the plan looks incomplete, say what's missing rather than rewriting it.
 
 ## Tips
 

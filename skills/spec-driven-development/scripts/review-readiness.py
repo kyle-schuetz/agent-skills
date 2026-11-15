@@ -12,7 +12,7 @@ Stages:
     plan --task-file <path>... [--worktree <path>]
         Check every task file and its spec at HEAD of a clean worktree. A task that has not
         started may have an empty starting commit; every other rule applies. Then each task file and
-        the plan named after it (TASKS-x.md has PLAN-x.md, tasks/todo.md has tasks/plan.md) follow the
+        the plan named after it (TASKS-[name].md has PLAN-[name].md beside it) follow the
         planning-and-task-breakdown templates.
     review <level> [<target>] --candidate <ref> --task-file <path>... [--worktree <path>]
         The review command's own setup, then each requirement's check exactly as the review runs it
@@ -25,7 +25,7 @@ Stages:
     staged
         The Git pre-commit hook (scripts/pre-commit). Checks the commit being made: each staged spec,
         each staged task file and each task file that links a staged spec, with the `plan` rules, each
-        staged plan (PLAN*.md, tasks/plan.md) against the plan template, and every added line of a staged
+        staged plan (PLAN*.md) against the plan template, and every added line of a staged
         Python test file for parametrize, test classes, skips, xfails, and reads of code or document text.
         Files that the commit does not touch are not checked.
 
@@ -58,7 +58,7 @@ FORBIDDEN = (r"parametrize|^class Test|pytest\.mark\.(skip|skipif|xfail)|pytest\
              r"|inspect\.getsource|hasattr\(|__file__\)\.read_text|\.md[\"']")
 PLAN_SECTIONS = ("Overview", "Architecture Decisions", "Task List", "Risks and Mitigations", "Open Questions")
 RISK_TABLE = re.compile(r"\|\s*Risk\s*\|\s*Impact\s*\|\s*Mitigation\s*\|")
-TASK_FILE_LINK = re.compile(r"\]\(([^)#\s]*/)?(TASKS[^)#\s/]*\.md|todo\.md)(#[^)\s]*)?\)")
+TASK_FILE_LINK = re.compile(r"\]\(([^)#\s]*/)?(TASKS[^)#\s/]*\.md)(#[^)\s]*)?\)")
 MAX_FILES = 5
 TEST_FILES = [":(glob)**/test_*.py", ":(glob)**/*_test.py", ":(glob)**/conftest.py", ":(glob)**/tests/**/*.py",
               ":(glob)**/test/**/*.py"]
@@ -136,9 +136,9 @@ def plan_stage(args) -> None:
 
 
 def plan_of(task_file: str) -> str:
-    """The plan file named after a task file: TASKS-x.md has PLAN-x.md beside it, tasks/todo.md has tasks/plan.md."""
+    """The plan file named after a task file: TASKS-[name].md has PLAN-[name].md beside it."""
     folder, name = posixpath.split(task_file)
-    return posixpath.join(folder, "plan.md" if name == "todo.md" else "PLAN" + name.removeprefix("TASKS"))
+    return posixpath.join(folder, "PLAN" + name.removeprefix("TASKS"))
 
 
 def check_plan_template(path: str, text: str):
@@ -240,15 +240,14 @@ def staged_stage(args) -> None:
 
 def check_documents(worktree: Path, commit: str, staged: list[str]) -> None:
     """Check the staged specs and the task files this commit touches: the staged task files, and the task files
-    that link a staged spec. A task file is a TASKS*.md file, a tasks/todo.md, or a file with a `**Spec:**` line and
+    that link a staged spec. A task file is a TASKS*.md file, or a file with a `**Spec:**` line and
     a `## Phase` heading. A spec is a SPEC*.md file or a file a task file links."""
     links = {}
     for path in _git(worktree, "ls-tree", "-r", "--name-only", "-z", commit).split("\0"):
         if not path.endswith(".md"):
             continue
         lines = list(_lines(_git(worktree, "show", f"{commit}:{path}")))
-        if (fnmatchcase(posixpath.basename(path), "TASKS*.md") or path == "tasks/todo.md"
-                or path.endswith("/tasks/todo.md")
+        if (fnmatchcase(posixpath.basename(path), "TASKS*.md")
                 or (any(line.startswith("**Spec:**") for line in lines) and any(_PHASE.match(line) for line in lines))):
             targets = [posixpath.normpath(posixpath.join(posixpath.dirname(path), match.group(1)))
                        for match in map(_SPEC_LINK.match, lines) if match]
@@ -264,7 +263,7 @@ def check_documents(worktree: Path, commit: str, staged: list[str]) -> None:
         report(f"task file {path} follows the template",
                lambda path=path: check_task_template(path, _git(worktree, "show", f"{commit}:{path}")))
     for path in staged:
-        if fnmatchcase(posixpath.basename(path), "PLAN*.md") or path == "tasks/plan.md" or path.endswith("/tasks/plan.md"):
+        if fnmatchcase(posixpath.basename(path), "PLAN*.md"):
             report(f"plan {path} follows the template",
                    lambda path=path: check_plan_template(path, _git(worktree, "show", f"{commit}:{path}")))
 

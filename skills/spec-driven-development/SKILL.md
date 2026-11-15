@@ -45,14 +45,14 @@ The evidence-based review tool reads the spec, the task files, and the test repo
 
 **Commit gate.** A phase that creates the spec or the task file ends only when that file is committed. The project's Git pre-commit hook (`scripts/pre-commit`) runs `review-readiness.py staged` on every commit and refuses the commit when:
 - a staged spec does not parse as review setup parses it, or a `Verification:` line cannot be read. A spec is any `SPEC*.md` file, or any file a task file links;
-- a staged task file, or a task file that links a staged spec, breaks a review setup rule (the `plan` rules below), including after a spec change removes a requirement a task lists. A task file is any `TASKS*.md` file, any `tasks/todo.md`, or any file with a `**Spec:**` line and a `## Phase` heading;
+- a staged task file, or a task file that links a staged spec, breaks a review setup rule (the `plan` rules below), including after a spec change removes a requirement a task lists. A task file is any `TASKS*.md` file, or any file with a `**Spec:**` line and a `## Phase` heading;
 - one of those task files breaks the task template of `planning-and-task-breakdown`: a task lists more than 5 files under `**Files likely touched:**` (each backticked name counts, and a bullet with none counts as one), or a phase other than the last is not followed by a `## Checkpoint:` heading before the next `## Phase` heading;
-- a staged plan breaks the plan template of `planning-and-task-breakdown`: the `## Overview`, `## Architecture Decisions`, `## Task List`, `## Risks and Mitigations` and `## Open Questions` headings are missing or out of order, Overview, Architecture Decisions or Open Questions is empty, Task List does not link the task file, or Risks and Mitigations has no `| Risk | Impact | Mitigation |` table. Other headings may appear anywhere. A plan is any `PLAN*.md` file or any `tasks/plan.md`;
+- a staged plan breaks the plan template of `planning-and-task-breakdown`: the `## Overview`, `## Architecture Decisions`, `## Task List`, `## Risks and Mitigations` and `## Open Questions` headings are missing or out of order, Overview, Architecture Decisions or Open Questions is empty, Task List does not link the task file, or Risks and Mitigations has no `| Risk | Impact | Mitigation |` table. Other headings may appear anywhere. A plan is any `PLAN*.md` file;
 - a staged Python test file (`test_*.py`, `*_test.py`, `conftest.py`, or any `.py` file under a `tests/` or `test/` folder) adds a `parametrize`, a `class Test`, a skip, an xfail, or a line that reads code or document text: `inspect.getsource`, `hasattr(`, a module's `__file__` read, or a `.md` path. A test checks behavior, not that a name or text is present or missing.
 
 Files the commit does not touch are not checked. A refused commit means the phase has not ended. Fix the file and commit again.
 
-Name every spec `SPEC*.md` and every task file `TASKS*.md` or `tasks/todo.md`, so the hook checks it. Name the plan after its task file: `TASKS-<name>.md` has `PLAN-<name>.md` in the same folder, and `tasks/todo.md` has `tasks/plan.md`.
+**Where the files live.** The spec, plan and task file of one piece of work live together in one folder under `docs/specs/`: `docs/specs/[work]/SPEC-[name].md`, `docs/specs/[work]/PLAN-[name].md` and `docs/specs/[work]/TASKS-[name].md`, with the same `[name]` in all three. The hook checks files by these names, and the `plan` stage finds the plan by its task file's `[name]`.
 
 Before Phase 1 writes anything, check that the hook is installed:
 
@@ -124,7 +124,7 @@ Build order: identity → billing, notifications → reporting
 
 **The map is gated like every phase.** The human reviews module boundaries, dependency direction, and build order before any module spec is written. Getting the map wrong is expensive; reviewing ten lines is not.
 
-**Then recurse per module.** Run Specify → Plan → Tasks → Implement for each module in dependency order. Each module gets its own spec, scoped to that module's objective, boundaries, and success criteria. Save the approved map at the project root and each module's spec alongside it, named by module id (`SPEC-identity.md`, `SPEC-billing.md`) — the map, not filename guessing, is the index of what exists.
+**Then recurse per module.** Run Specify → Plan → Tasks → Implement for each module in dependency order. Each module gets its own spec, scoped to that module's objective, boundaries, and success criteria. Save the approved map as `docs/specs/[work]/CAPABILITY-MAP.md` and each module's spec, plan and task file beside it, with the module id as `[name]` — the map, not filename guessing, is the index of what exists.
 
 ### Phase 1: Specify
 
@@ -265,7 +265,7 @@ With the validated spec, generate a technical implementation plan:
 
 > Follow `planning-and-task-breakdown` for the dependency-graph mapping and vertical-slicing mechanics behind these steps; it is the canonical source. The bullets above are a lightweight summary; if they ever diverge, `planning-and-task-breakdown` takes precedence.
 >
-> **Output convention:** Save the plan to `tasks/plan.md` and record the task list in the task list target defined by `planning-and-task-breakdown`: a markdown task file committed to the repository (default `tasks/todo.md`). A tracker may mirror it but does not replace it. Create `tasks/` if it does not exist. Downstream commands (`/build`, etc.) expect these defaults.
+> **Output convention:** Save the plan as `docs/specs/[work]/PLAN-[name].md` and the task list as `docs/specs/[work]/TASKS-[name].md`, beside the spec (see Where the files live). A tracker may mirror the task file but does not replace it. Downstream commands (`/build`, etc.) expect these paths.
 
 The plan should be reviewable: the human should be able to read it and say "yes, that's the right approach" or "no, change X."
 

@@ -92,7 +92,7 @@ Skills are user-invocable by default, so once they're discovered the whole lifec
 | Workflow | Copilot invocation | Notes |
 |----------|--------------------|-------|
 | Define | `/spec-driven-development` | Writes a structured spec before code |
-| Plan | `/planning-and-task-breakdown` | Produces `tasks/plan.md` and `tasks/todo.md` |
+| Plan | `/planning-and-task-breakdown` | Produces `docs/specs/[work]/PLAN-[name].md` and `docs/specs/[work]/TASKS-[name].md` |
 | Build | `/incremental-implementation` | Pair with `/test-driven-development`; one slice at a time |
 | Verify | `/test-driven-development` | Red-green-refactor, Prove-It for bugs |
 | Review | `/code-review-and-quality` | Five-axis review |
@@ -126,19 +126,19 @@ Use the spec-driven-development skill.
 Ask clarifying questions about the objective and target users, core features and
 acceptance criteria, stack preferences and constraints, and known boundaries.
 Then write a spec covering objective, commands, project structure, code style,
-testing strategy, and boundaries. Save it as SPEC.md in the project root and
+testing strategy, and boundaries. Save it as docs/specs/[work]/SPEC-[name].md and
 confirm with me before any code is written.
 EOF
 ```
 
 Reload the window, then type `/spec`.
 
-For the rest, run the same `mkdir`/`cat` block with the filename swapped (the filename *is* the command name), and take the `description` and body from this table. **Replace the entire body below the `---` frontmatter**, not just the skill name — the spec body's SPEC.md and clarifying-question instructions belong to Define only, and leaving them in would make `/plan` or `/test` write a spec.
+For the rest, run the same `mkdir`/`cat` block with the filename swapped (the filename *is* the command name), and take the `description` and body from this table. **Replace the entire body below the `---` frontmatter**, not just the skill name — the spec body's save-the-spec and clarifying-question instructions belong to Define only, and leaving them in would make `/plan` or `/test` write a spec.
 
 | Alias file | `description` | Complete body — everything below the frontmatter |
 |------------|---------------|--------------------------------------------------|
-| `.github/prompts/plan.prompt.md` | Break an approved spec into ordered, verifiable tasks | Use the planning-and-task-breakdown skill. Read the spec, then break the work into small, independently verifiable tasks, each with acceptance criteria and explicit dependency order. Save the result to `tasks/plan.md` and `tasks/todo.md`. Write no product code — show me the plan and wait for my approval. |
-| `.github/prompts/build.prompt.md` | Implement the next planned task, test-first | Use the incremental-implementation and test-driven-development skills. Read `tasks/plan.md` and `tasks/todo.md`, then take the next unchecked task and only that one. Write a failing test first, make it pass, refactor, run the suite, and tick the task off. Stop there and report what changed. |
+| `.github/prompts/plan.prompt.md` | Break an approved spec into ordered, verifiable tasks | Use the planning-and-task-breakdown skill. Read the spec, then break the work into small, independently verifiable tasks, each with acceptance criteria and explicit dependency order. Save the result to `docs/specs/[work]/PLAN-[name].md` and `docs/specs/[work]/TASKS-[name].md`, beside the spec. Write no product code — show me the plan and wait for my approval. |
+| `.github/prompts/build.prompt.md` | Implement the next planned task, test-first | Use the incremental-implementation and test-driven-development skills. Read `docs/specs/[work]/PLAN-[name].md` and `docs/specs/[work]/TASKS-[name].md`, then take the next unchecked task and only that one. Write a failing test first, make it pass, refactor, run the suite, and tick the task off. Stop there and report what changed. |
 | `.github/prompts/test.prompt.md` | Write tests before the code that satisfies them | Use the test-driven-development skill. For new behavior, write a failing test that captures it before any implementation. For a bug, reproduce it with a failing test first, then fix it. Run the suite after each step and show me the red and the green output. |
 
 Write the body yourself, or take it from this table, rather than copying `.claude/commands/*.md` verbatim: those files reference skills as `agent-skills:<name>`, a Claude Code plugin namespace that means nothing to Copilot.

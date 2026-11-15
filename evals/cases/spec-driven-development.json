@@ -42,7 +42,7 @@
     {
       "id": 1,
       "prompt": "We want usage-based billing. Produce the spec before any implementation.",
-      "expected_output": "A SPEC.md covering objectives, behavior, data model, testing strategy, and explicit boundaries",
+      "expected_output": "A docs/specs/[work]/SPEC-[name].md covering objectives, behavior, data model, testing strategy, and explicit boundaries",
       "files": [
         "spec-driven-development"
       ],

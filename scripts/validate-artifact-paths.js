@@ -11,12 +11,13 @@
  * `/build` still required SPEC.md and tasks/plan.md — the pipeline breaks, and
  * nothing else in CI catches it (command parity only compares descriptions).
  *
- * This validator enforces one canonical set of spec/plan/todo artifact paths
- * across every file in the pipeline. Changing the convention means updating
+ * This validator enforces one canonical set of spec/plan/task artifact paths
+ * across every file in the pipeline: one folder under docs/specs/ holds the
+ * spec, plan and task file of one piece of work. Changing the convention means updating
  * ARTIFACT_ALLOWLIST *and* every guarded file in the same change; CI fails
  * until they agree.
  *
- * Scope is deliberately narrow: only spec/plan/todo artifacts, only the files
+ * Scope is deliberately narrow: only spec/plan/task artifacts, only the files
  * that define the pipeline. It is not a general markdown path linter.
  *
  * Exit codes: 0 = all clear, 1 = one or more drifted paths.
@@ -29,14 +30,16 @@ const path = require('path');
 
 const ROOT = path.resolve(__dirname, '..');
 
-// The canonical spec/plan/todo artifact paths. These are the only artifact
+// The canonical spec/plan/task artifact paths. These are the only artifact
 // file paths the pipeline files may reference. To change the convention, edit
 // this list and update every guarded file to match — CI enforces the pairing.
 const ARTIFACT_ALLOWLIST = new Set([
-  'SPEC.md',        // spec, project root (produced by /spec, read by /build)
-  'docs/SPEC.md',   // spec, alternate location accepted by /build
-  'tasks/plan.md',  // plan (produced by /plan, read by /build)
-  'tasks/todo.md',  // task list (produced by /plan)
+  'docs/specs/[work]/SPEC-[name].md',   // spec (produced by /spec, read by /plan and /build)
+  'docs/specs/[work]/PLAN-[name].md',   // plan (produced by /plan, read by /build)
+  'docs/specs/[work]/TASKS-[name].md',  // task list (produced by /plan, read by /build)
+  'SPEC-[name].md',                     // the same files as linked from each other
+  'PLAN-[name].md',
+  'TASKS-[name].md',
 ]);
 
 // The files that make up the spec -> plan -> build pipeline. Absent files are
@@ -68,11 +71,12 @@ const GUARDED_FILES = [
   'docs/copilot-setup.md', // its prompt-file aliases name the artifacts directly
 ];
 
-// Matches a path-like token ending in a spec/plan/todo artifact filename,
+// Matches a path-like token ending in a spec/plan/task artifact filename,
 // including an optional directory prefix with bracket placeholders like
-// docs/features/[feature-name]/spec.md. Case-insensitive so SPEC.md and a
-// drifted spec.md are both caught, then compared against the allowlist.
-const ARTIFACT_RE = /(?:[A-Za-z0-9._[\]-]+\/)*(?:spec|plan|todo)\.md/gi;
+// docs/features/[feature-name]/spec.md. Case-insensitive so SPEC-[name].md,
+// a drifted SPEC.md and a drifted tasks/todo.md are all caught, then compared
+// against the allowlist.
+const ARTIFACT_RE = /(?:[A-Za-z0-9._[\]-]+\/)*(?:(?:SPEC|PLAN|TASKS)-[A-Za-z0-9._[\]-]+|spec|plan|todo)\.md/gi;
 
 function findViolations(relPath) {
   const abs = path.join(ROOT, relPath);
@@ -93,7 +97,7 @@ function findViolations(relPath) {
 }
 
 function main() {
-  console.log('Checking spec/plan/todo artifact paths...\n');
+  console.log('Checking spec/plan/task artifact paths...\n');
 
   let checked = 0;
   let errors = 0;
@@ -108,7 +112,7 @@ function main() {
     } else {
       console.log(`  ✗  ${relPath}`);
       for (const { line, match } of violations) {
-        console.log(`       L${line}: ${match} — not an approved spec/plan/todo artifact path`);
+        console.log(`       L${line}: ${match} — not an approved spec/plan/task artifact path`);
         errors++;
       }
     }
