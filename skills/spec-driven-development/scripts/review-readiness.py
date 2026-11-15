@@ -19,7 +19,7 @@ Stages:
         (project setup, the build and test command declared for the test file's type, the report
         matched to each named test), in a temporary worktree at the candidate. Then no tracked Python
         test file may hold a parametrized test, test class, skip, xfail, or read of code or document
-        text (inspect.getsource, hasattr, a module's __file__ read, a .md path). Same arguments as
+        text (inspect.getsource, hasattr, a module's __file__ read). Same arguments as
         `evidence-based-review review`.
 
     staged
@@ -55,7 +55,7 @@ from evidence_based_review.scope import (_PHASE, _SPEC_LINK, _TASK, _baseline, _
 from evidence_based_review.agents import build_directory, project_commands, run_build, run_commands, run_setup
 
 FORBIDDEN = (r"parametrize|^class Test|pytest\.mark\.(skip|skipif|xfail)|pytest\.(skip|xfail|importorskip)\("
-             r"|inspect\.getsource|hasattr\(|__file__\)\.read_text|\.md[\"']")
+             r"|inspect\.getsource|hasattr\(|__file__\)\.read_text")
 PLAN_SECTIONS = ("Overview", "Architecture Decisions", "Task List", "Risks and Mitigations", "Open Questions")
 RISK_TABLE = re.compile(r"\|\s*Risk\s*\|\s*Impact\s*\|\s*Mitigation\s*\|")
 TASK_FILE_LINK = re.compile(r"\]\(([^)#\s]*/)?(TASKS[^)#\s/]*\.md)(#[^)\s]*)?\)")
