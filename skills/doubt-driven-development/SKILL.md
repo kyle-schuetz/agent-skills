@@ -105,6 +105,8 @@ CONTRACT: <paste contract>
 
 **Pass ARTIFACT + CONTRACT only. Do NOT pass the CLAIM.** Handing the reviewer your conclusion biases it toward agreement. The reviewer must independently determine whether the artifact satisfies the contract.
 
+When the artifact is code in a Git repository, run the reviewer as a claim-check investigation run (`claim-check run --kind investigate`, see the `claim-check` skill). The task file holds the adversarial prompt, the artifact's paths at the commit, and the contract, and still not the claim. Only findings claim-check accepts go into RECONCILE. Findings it can't accept are shown to Kyle as such. For an artifact outside a repository, such as a pasted plan, the reviewer runs as described above.
+
 In Claude Code, the role-based reviewers in `agents/` start with isolated context by design and are usable here — see `agents/` for the roster and per-domain match.
 
 **The adversarial prompt above takes precedence over the persona's default response shape.** Personas like `code-reviewer` are written to produce balanced verdicts with both strengths and weaknesses; doubt-driven needs issues-only output. Paste the adversarial prompt verbatim into the invocation so it overrides the persona's default. If a persona's response shape can't be overridden cleanly, fall back to a generic subagent with the adversarial prompt.
