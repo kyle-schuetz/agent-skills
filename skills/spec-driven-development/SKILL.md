@@ -130,6 +130,8 @@ Build order: identity → billing, notifications → reporting
 
 Start with a high-level vision. Ask the human clarifying questions until requirements are concrete.
 
+Any worker that investigates the code for the spec or the plan, such as a survey of the code a spec cites, a question about current behavior, or the facts behind a draft, runs as a claim-check investigation run (`claim-check run --kind investigate`, see the `claim-check` skill). Research into web docs or APIs does not. The coordinator writes into the spec only what claim-check accepted, or what Kyle settles.
+
 **Surface assumptions immediately.** Before writing any spec content, list what you're assuming:
 
 ```
