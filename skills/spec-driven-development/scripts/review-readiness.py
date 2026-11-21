@@ -26,7 +26,8 @@ Stages:
     staged
         The Git pre-commit hook (scripts/pre-commit). Checks the commit being made: each staged spec,
         each staged task file and each task file that links a staged spec, with the `plan` rules, each
-        staged plan (PLAN*.md) against the plan template, and every added line of a staged
+        staged task file against the task template, each staged plan (PLAN*.md) against the plan
+        template, and every added line of a staged
         Python test file for parametrize, test classes, skips, xfails, and reads of code or document text,
         and every added line of a staged .rs file for #[ignore], rstest or test_case, and include_str!.
         Files that the commit does not touch are not checked.
@@ -249,8 +250,9 @@ def staged_stage(args) -> None:
 
 def check_documents(worktree: Path, commit: str, staged: list[str]) -> None:
     """Check the staged specs and the task files this commit touches: the staged task files, and the task files
-    that link a staged spec. A task file is a TASKS*.md file, or a file with a `**Spec:**` line and
-    a `## Phase` heading. A spec is a SPEC*.md file or a file a task file links."""
+    that link a staged spec. Only a staged task file is checked against the task template. A task file is a
+    TASKS*.md file, or a file with a `**Spec:**` line and a `## Phase` heading. A spec is a SPEC*.md file or a
+    file a task file links."""
     links = {}
     for path in _git(worktree, "ls-tree", "-r", "--name-only", "-z", commit).split("\0"):
         if not path.endswith(".md"):
@@ -269,8 +271,9 @@ def check_documents(worktree: Path, commit: str, staged: list[str]) -> None:
     # One check per task file: a commit can touch task files of unrelated work; plan and review check order across one work's files.
     for path in task_files:
         report(f"task file {path} in this commit", lambda path=path: check_work(worktree, commit, [path]))
-        report(f"task file {path} follows the template",
-               lambda path=path: check_task_template(path, _git(worktree, "show", f"{commit}:{path}")))
+        if path in staged:
+            report(f"task file {path} follows the template",
+                   lambda path=path: check_task_template(path, _git(worktree, "show", f"{commit}:{path}")))
     for path in staged:
         if fnmatchcase(posixpath.basename(path), "PLAN*.md"):
             report(f"plan {path} follows the template",
