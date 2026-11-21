@@ -19,14 +19,16 @@ Stages:
         (project setup, the build and test command declared for the test file's type, the report
         matched to each named test), in a temporary worktree at the candidate. Then no tracked Python
         test file may hold a parametrized test, test class, skip, xfail, or read of code or document
-        text (inspect.getsource, hasattr, a module's __file__ read). Same arguments as
+        text (inspect.getsource, hasattr, a module's __file__ read), and no tracked .rs file may hold
+        #[ignore], an rstest or test_case attribute or import, or include_str!. Same arguments as
         `evidence-based-review review`.
 
     staged
         The Git pre-commit hook (scripts/pre-commit). Checks the commit being made: each staged spec,
         each staged task file and each task file that links a staged spec, with the `plan` rules, each
         staged plan (PLAN*.md) against the plan template, and every added line of a staged
-        Python test file for parametrize, test classes, skips, xfails, and reads of code or document text.
+        Python test file for parametrize, test classes, skips, xfails, and reads of code or document text,
+        and every added line of a staged .rs file for #[ignore], rstest or test_case, and include_str!.
         Files that the commit does not touch are not checked.
 
 Prints one line per check, then READY or NOT READY. Exit code 0 only when READY.
@@ -62,6 +64,9 @@ TASK_FILE_LINK = re.compile(r"\]\(([^)#\s]*/)?(TASKS[^)#\s/]*\.md)(#[^)\s]*)?\)"
 MAX_FILES = 5
 TEST_FILES = [":(glob)**/test_*.py", ":(glob)**/*_test.py", ":(glob)**/conftest.py", ":(glob)**/tests/**/*.py",
               ":(glob)**/test/**/*.py"]
+# Rust unit tests live in src/ files, so every .rs file is checked (evidence-based-review cargo-tests spec).
+RUST_FORBIDDEN = r"#\[ignore|#\[(rstest|test_case)\b|use (rstest|test_case)\b|include_str!"
+RUST_FILES = [":(glob)**/*.rs"]
 failures: list[str] = []
 
 
@@ -232,10 +237,14 @@ def staged_stage(args) -> None:
                   "-m", "review readiness check of the staged tree").strip()
     staged = _git(worktree, "diff", "--cached", "--name-only", "--diff-filter=ACMR", "-z").split("\0")
     check_documents(worktree, commit, staged)
-    added = [line for line in _git(worktree, "diff", "--cached", "-U0", "--", *TEST_FILES).splitlines()
-             if line.startswith("+") and not line.startswith("+++")]
+    def added(files: list[str]) -> list[str]:
+        return [line[1:] for line in _git(worktree, "diff", "--cached", "-U0", "--", *files).splitlines()
+                if line.startswith("+") and not line.startswith("+++")]
+
     report("no parametrize, test classes, skips, xfails, or code or document text reads added",
-           lambda: forbidden_lines([line[1:] for line in added]))
+           lambda: forbidden_lines(added(TEST_FILES), FORBIDDEN, "Python test"))
+    report("no #[ignore], rstest or test_case, or include_str! added",
+           lambda: forbidden_lines(added(RUST_FILES), RUST_FORBIDDEN, "Rust"))
 
 
 def check_documents(worktree: Path, commit: str, staged: list[str]) -> None:
@@ -268,11 +277,11 @@ def check_documents(worktree: Path, commit: str, staged: list[str]) -> None:
                    lambda path=path: check_plan_template(path, _git(worktree, "show", f"{commit}:{path}")))
 
 
-def forbidden_lines(lines: list[str]):
-    found = [line for line in lines if re.search(FORBIDDEN, line)]
+def forbidden_lines(lines: list[str], pattern: str, kind: str):
+    found = [line for line in lines if re.search(pattern, line)]
     if found:
         raise Failure(f"{len(found)} added line(s); every test is one plain function, run once, that checks behavior, not code or document text:\n" + "\n".join(found))
-    return None, f"{len(lines)} added Python test lines checked"
+    return None, f"{len(lines)} added {kind} lines checked"
 
 
 def review_stage(args) -> None:
@@ -287,7 +296,9 @@ def review_stage(args) -> None:
         return
     run_named_checks(worktree, definition)
     report("no parametrize, test classes, skips, xfails, or code or document text reads in any Python test file",
-           lambda: forbidden(worktree, definition["candidate"]))
+           lambda: forbidden(worktree, definition["candidate"], FORBIDDEN, TEST_FILES))
+    report("no #[ignore], rstest or test_case, or include_str! in any Rust file",
+           lambda: forbidden(worktree, definition["candidate"], RUST_FORBIDDEN, RUST_FILES))
 
     def clean():
         check_source(worktree, definition["candidate"])
@@ -344,8 +355,8 @@ def one_check(store: RecordStore, requirement: dict, worktree: Path, commit: str
     return None, f"{label}: {results}"
 
 
-def forbidden(worktree: Path, commit: str):
-    command = ["git", "-C", str(worktree), "grep", "-n", "-E", FORBIDDEN, commit, "--", *TEST_FILES]
+def forbidden(worktree: Path, commit: str, pattern: str, files: list[str]):
+    command = ["git", "-C", str(worktree), "grep", "-n", "-E", pattern, commit, "--", *files]
     run = subprocess.run(command, capture_output=True, text=True)
     if run.returncode == 1:
         return None, "git grep found nothing"
