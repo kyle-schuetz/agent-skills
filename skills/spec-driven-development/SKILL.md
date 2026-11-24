@@ -255,6 +255,8 @@ REFRAMED SUCCESS CRITERIA:
 
 This lets you loop, retry, and problem-solve toward a clear goal rather than guessing what "faster" means.
 
+**Requirement check.** Before you commit the spec for approval, read each requirement against its `Verification:` line. Rewrite a requirement whose text claims more than its check proves, uses an open-ended or future-facing phrase (such as "the packages the notebooks import" or "all callers"), or depends on a dependency's or another tool's behavior. Its text states only what its test or command proves, about this project's own code or files. When you ask for approval, show the human one line per requirement: what its text claims, and what its check proves. The hook checks format only, never this.
+
 **Specify hook.** Commit the spec; the pre-commit hook checks it. Then run `uv run --project /home/kyleschuetz/evidence-based-review python /home/kyleschuetz/.agents/skills/spec-driven-development/scripts/review-readiness.py spec <spec file>` and paste its output. It must end with `READY`. Only then ask the human to approve the spec, at the commit the output names. After any requested change, commit again and run the hook again before asking again.
 
 ### Phase 2: Plan
@@ -367,6 +369,7 @@ Before proceeding to implementation, confirm:
 - [ ] Success criteria are specific and testable
 - [ ] Every requirement has a stable ID and a `Verification:` line under `## Requirements` that names its tests and one test file in this project, of a type the project has a test command for, or, for a one-time change, one command
 - [ ] The project's pre-commit hook is the link to `scripts/pre-commit`, and the spec and task file were committed through it
+- [ ] Each requirement's text claims only what its check proves, and the approval request listed claim and check per requirement
 - [ ] The Specify hook output is pasted and ends with `READY`
 - [ ] The Plan and Tasks hook output is pasted and ends with `READY`
 - [ ] Boundaries (Always/Ask First/Never) are defined
