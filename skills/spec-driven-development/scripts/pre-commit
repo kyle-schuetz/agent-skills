@@ -1,4 +1,9 @@
 #!/bin/sh
-# Git pre-commit hook: refuse a commit whose spec, task files, or tests the evidence-based review tool would reject.
+# Git pre-commit hook: refuse a commit whose spec, task files, or tests the evidence-based review tool would reject,
+# or whose added lines or paths break Kyle's code rules that hold in every project (code-rules).
 # Install in a project: ln -s /home/kyleschuetz/.agents/skills/spec-driven-development/scripts/pre-commit "$(git rev-parse --git-common-dir)/hooks/pre-commit"
-exec uv run --project /home/kyleschuetz/evidence-based-review python /home/kyleschuetz/.agents/skills/spec-driven-development/scripts/review-readiness.py staged
+uv run --project /home/kyleschuetz/evidence-based-review python /home/kyleschuetz/.agents/skills/spec-driven-development/scripts/review-readiness.py staged
+readiness=$?
+uv run --project /home/kyleschuetz/code-rules code-rules staged
+rules=$?
+[ "$readiness" -eq 0 ] && [ "$rules" -eq 0 ]
